@@ -14,7 +14,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
-public/firebase-config.js
 
 # Editor directories and files
 .vscode/*

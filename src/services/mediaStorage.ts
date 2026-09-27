@@ -157,10 +157,28 @@ export async function resolveAudioSource(
   // 1. Persistent IndexedDB URI: idb://<key>
   if (src.startsWith('idb://')) {
     const key = src.slice(6);
-    const liveUrl = await getMediaUrl(key);
+    let liveUrl = await getMediaUrl(key);
+
+    if (!liveUrl) {
+      const allKeys = await getAllMediaKeys();
+      const audioKeys = allKeys.filter((k) => typeof k === 'string' && k.startsWith('audio_'));
+
+      if (audioKeys.length > 0) {
+        let matchedKey = audioKeys[audioKeys.length - 1];
+        const cleanTitle = trackTitle?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+        const candidate = cleanTitle
+          ? audioKeys.find((k) => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanTitle))
+          : undefined;
+
+        if (candidate) matchedKey = candidate;
+        liveUrl = await getMediaUrl(matchedKey);
+      }
+    }
+
     if (liveUrl) return liveUrl;
-    console.warn(`[Melodix Audio] Key ${key} not found in IndexedDB. This usually means the upload was stored as a local-only fallback instead of a Firebase Storage URL.`);
-    return src;
+
+    console.warn(`[Melodix Audio] Key ${key} not found in IndexedDB. Falling back to the safe bundled audio file instead of a broken idb:// URL.`);
+    return fallbackTrack;
   }
 
   // 2. Normal HTTP/HTTPS URL (not a blob URL)

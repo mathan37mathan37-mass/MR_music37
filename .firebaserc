@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "music-ea28e"
-  }
+    "default": "music-ea28e",
+    "gsutil cors set cors.json gs://YOUR_FIREBASE_STORAGE_BUCKET": "music-ea28e"
+  },
+  "targets": {},
+  "etags": {}
 }

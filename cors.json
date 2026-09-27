@@ -1,0 +1,20 @@
+[
+  {
+    "origin": [
+      "http://localhost:5173",
+      "https://localhost:5173",
+      "https://mrmusic37-omega.vercel.app",
+      "https://*.vercel.app"
+    ],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Range",
+      "Accept",
+      "Content-Length"
+    ]
+  }
+]

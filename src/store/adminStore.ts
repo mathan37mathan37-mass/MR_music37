@@ -633,9 +633,13 @@ if (typeof window !== 'undefined') {
               }
             }
           } else if (song.audioUrl?.startsWith('idb://')) {
-            // Pre-warm memory cache so instant playback has 0ms latency
             const key = song.audioUrl.slice(6);
-            await getMediaUrl(key);
+            const liveUrl = await getMediaUrl(key);
+            if (!liveUrl) {
+              const fallback = '/audio/track-1.wav';
+              state.updateSong(song.id, { audioUrl: fallback });
+              console.warn(`[AdminStore] Replaced broken idb:// song URL with fallback for "${song.title || 'track'}"`);
+            }
           }
         }
       }

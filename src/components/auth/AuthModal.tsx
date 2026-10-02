@@ -101,11 +101,9 @@ export function AuthModal() {
     setIsSubmitting(true);
     try {
       await loginWithGoogle();
-      addToast('Signed in with Google successfully!', 'success');
-      handleClose();
+      // Browser is redirecting to Google — keep loading state active
     } catch (err: any) {
       setErrorMessage(err.message || 'Google sign-in failed');
-    } finally {
       setIsSubmitting(false);
     }
   };

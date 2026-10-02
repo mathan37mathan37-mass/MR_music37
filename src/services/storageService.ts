@@ -1,5 +1,21 @@
+/**
+ * storageService.ts
+ *
+ * Unified upload entry-point.
+ *
+ * Priority:
+ *   1. Supabase Storage  — when VITE_SUPABASE_URL is configured
+ *   2. Firebase Storage  — when VITE_FIREBASE_* is configured
+ *   3. Local IndexedDB   — offline / demo fallback
+ *
+ * All validation helpers and the local IndexedDB fallback are preserved
+ * so the rest of the app (admin upload forms, player, etc.) works unchanged.
+ */
+
 import { ref, uploadBytesResumable, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage, isFirebaseConfigured } from './firebase';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { uploadToSupabase } from './supabaseStorageService';
 import { storeMediaBlob, compressImageToDataUrl } from './mediaStorage';
 export { resolveAudioSource, getMediaUrl, isBlobUrlAlive } from './mediaStorage';
 
@@ -38,15 +54,9 @@ export const ALLOWED_IMAGE_TYPES = [
 export const MAX_AUDIO_SIZE_BYTES = 35 * 1024 * 1024; // 35 MB
 export const MAX_IMAGE_SIZE_BYTES = 6 * 1024 * 1024;  // 6 MB
 
-/**
- * Validates an audio file for MIME type and file size
- */
 export function validateAudioFile(file: File): FileValidationResult {
-  if (!file) {
-    return { valid: false, error: 'No file provided' };
-  }
+  if (!file) return { valid: false, error: 'No file provided' };
 
-  // Check type (or extension fallback for some browser MIME anomalies)
   const isAudioType = ALLOWED_AUDIO_TYPES.includes(file.type) ||
     /\.(mp3|wav|ogg|aac|flac|m4a)$/i.test(file.name);
 
@@ -59,22 +69,14 @@ export function validateAudioFile(file: File): FileValidationResult {
 
   if (file.size > MAX_AUDIO_SIZE_BYTES) {
     const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    return {
-      valid: false,
-      error: `Audio file is too large (${sizeMb} MB). Maximum allowed size is 35 MB.`,
-    };
+    return { valid: false, error: `Audio file is too large (${sizeMb} MB). Maximum: 35 MB.` };
   }
 
   return { valid: true };
 }
 
-/**
- * Validates an image file for MIME type and file size
- */
 export function validateImageFile(file: File): FileValidationResult {
-  if (!file) {
-    return { valid: false, error: 'No file provided' };
-  }
+  if (!file) return { valid: false, error: 'No file provided' };
 
   const isImageType = ALLOWED_IMAGE_TYPES.includes(file.type) ||
     /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(file.name);
@@ -88,75 +90,13 @@ export function validateImageFile(file: File): FileValidationResult {
 
   if (file.size > MAX_IMAGE_SIZE_BYTES) {
     const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    return {
-      valid: false,
-      error: `Image file is too large (${sizeMb} MB). Maximum allowed size is 6 MB.`,
-    };
+    return { valid: false, error: `Image file is too large (${sizeMb} MB). Maximum: 6 MB.` };
   }
 
   return { valid: true };
 }
 
-/**
- * Simple (non-resumable) upload — avoids the resumable multipart CORS preflight.
- * Used as a fallback when uploadBytesResumable hits CORS errors.
- */
-async function uploadBytesSimple(
-  path: string,
-  file: File,
-  options?: UploadOptions
-): Promise<string> {
-  const { onProgress, onError, onSuccess } = options || {};
-
-  if (!storage) throw new Error('Firebase Storage instance is not initialized.');
-
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const fileRef = ref(storage, `${path}/${Date.now()}_${sanitizedName}`);
-
-  // Simulate progress since uploadBytes has no progress events
-  let prog = 10;
-  onProgress?.(prog);
-  const ticker = setInterval(() => {
-    prog = Math.min(85, prog + 8);
-    onProgress?.(prog);
-  }, 250);
-
-  try {
-    const snapshot = await uploadBytes(fileRef, file);
-    clearInterval(ticker);
-    onProgress?.(95);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    onProgress?.(100);
-    onSuccess?.(downloadUrl);
-    return downloadUrl;
-  } catch (err) {
-    clearInterval(ticker);
-    const error = err instanceof Error ? err : new Error(String(err));
-    onError?.(error);
-    throw error;
-  }
-}
-
-/**
- * Uploads a media file to Firebase Storage with real-time progress callbacks.
- * Tries resumable upload first (for progress), falls back to simple upload on CORS error.
- * Falls back to local data URL simulation in offline/demo mode.
- */
-let isFirebaseStorageCorsBlocked = false;
-
-// Configure fast retry timeouts on storage instance if available
-if (storage) {
-  try {
-    // @ts-ignore
-    storage.maxUploadRetryTime = 1200;
-    // @ts-ignore
-    storage.maxOperationRetryTime = 1200;
-  } catch (_) {}
-}
-
-/**
- * Executes high-performance local storage fallback (IndexedDB for audio, compressed Data URL for images).
- */
+// ── Local fallback ─────────────────────────────────────────────────────────
 async function runLocalFallback(
   file: File,
   sanitizedName: string,
@@ -187,22 +127,15 @@ async function runLocalFallback(
     clearInterval(progTimer);
     const mediaKey = `audio_${Date.now()}_${sanitizedName}`;
     const persistentUri = `idb://${mediaKey}`;
-    try {
-      await storeMediaBlob(mediaKey, file);
-    } catch {
-      // fallback
-    }
+    try { await storeMediaBlob(mediaKey, file); } catch { /* ignore */ }
     onProgress?.(100);
     onSuccess?.(persistentUri);
     return persistentUri;
   }
 }
 
-/**
- * Uploads a media file to Firebase Storage with real-time progress callbacks.
- * If Firebase Storage is blocked by CORS (or offline/slow), instantly falls back to IndexedDB and compressed local storage.
- */
-export async function uploadMediaWithProgress(
+// ── Firebase resumable upload ──────────────────────────────────────────────
+async function runFirebaseUpload(
   path: string,
   file: File,
   options?: UploadOptions
@@ -210,32 +143,25 @@ export async function uploadMediaWithProgress(
   const { onProgress, onSuccess } = options || {};
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-  // If Firebase Storage is unconfigured or CORS was already detected as blocked, use local fallback immediately
-  if (!isFirebaseConfigured() || !storage || isFirebaseStorageCorsBlocked) {
-    return runLocalFallback(file, sanitizedName, options);
-  }
-
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let completed = false;
     let bytesReceived = 0;
 
-    const doFallback = async (reason: string) => {
+    const failUpload = (reason: string) => {
       if (completed) return;
       completed = true;
-      console.warn(`Firebase Storage notice (${reason}). Switched to local offline media storage.`);
-      const localUrl = await runLocalFallback(file, sanitizedName, options);
-      resolve(localUrl);
+      const error = new Error(`Firebase Storage upload failed: ${reason}.`);
+      options?.onError?.(error);
+      reject(error);
     };
 
     try {
       const fileRef = ref(storage!, `${path}/${Date.now()}_${sanitizedName}`);
       const uploadTask = uploadBytesResumable(fileRef, file);
 
-      // Give Firebase Storage time to establish the network connection before deciding
-      // that it is blocked. Some valid uploads stall briefly before the first byte begins.
       const watchdog = setTimeout(() => {
         if (!completed && bytesReceived === 0) {
-          console.warn('[Firebase Storage] Upload has not transferred bytes yet; waiting longer before local fallback.');
+          console.warn('[Firebase Storage] Upload stalled; waiting…');
         }
       }, 8000);
 
@@ -245,48 +171,79 @@ export async function uploadMediaWithProgress(
           bytesReceived = snapshot.bytesTransferred;
           if (snapshot.bytesTransferred > 0) {
             clearTimeout(watchdog);
-            const progress = Math.round(
-              (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-            );
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
             onProgress?.(progress);
           }
         },
         (error) => {
           clearTimeout(watchdog);
-          try {
-            uploadTask.cancel();
-          } catch (_) {}
-          isFirebaseStorageCorsBlocked = true;
-          doFallback(error.message || error.code || 'storage error');
+          try { uploadTask.cancel(); } catch (_) {}
+          failUpload(error.message || error.code || 'storage error');
         },
         async () => {
           clearTimeout(watchdog);
           if (completed) return;
-          completed = true;
           try {
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            completed = true;
             onProgress?.(100);
             onSuccess?.(downloadUrl);
             resolve(downloadUrl);
           } catch (err) {
-            isFirebaseStorageCorsBlocked = true;
-            doFallback('getDownloadURL error');
+            failUpload(err instanceof Error ? err.message : 'getDownloadURL error');
           }
         }
       );
     } catch (err) {
-      isFirebaseStorageCorsBlocked = true;
-      doFallback('Task creation error');
+      failUpload(err instanceof Error ? err.message : 'Task creation error');
     }
   });
 }
 
+// Configure fast retry timeouts on Firebase storage instance if available
+if (storage) {
+  try {
+    // @ts-ignore
+    storage.maxUploadRetryTime = 1200;
+    // @ts-ignore
+    storage.maxOperationRetryTime = 1200;
+  } catch (_) {}
+}
+
 /**
- * Backwards compatible simple upload helper
+ * Uploads a media file — tries Supabase first, then Firebase, then local fallback.
+ *
+ * @param path   Storage path prefix (e.g. "songs/t123" or "covers/t123")
+ * @param file   The file to upload
+ * @param options Progress / success / error callbacks
  */
+export async function uploadMediaWithProgress(
+  path: string,
+  file: File,
+  options?: UploadOptions
+): Promise<string> {
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  // ── 1. Supabase Storage ──────────────────────────────────────────────────
+  if (isSupabaseConfigured()) {
+    // Derive the bucket from the path prefix
+    let bucket: 'songs' | 'covers' | 'avatars' = 'covers';
+    if (path.startsWith('songs') || path.includes('audio')) bucket = 'songs';
+    else if (path.startsWith('avatars') || path.includes('avatar')) bucket = 'avatars';
+
+    return uploadToSupabase(bucket, path, file, options);
+  }
+
+  // ── 2. Firebase Storage ──────────────────────────────────────────────────
+  if (isFirebaseConfigured() && storage) {
+    return runFirebaseUpload(path, file, options);
+  }
+
+  // ── 3. Local IndexedDB fallback ──────────────────────────────────────────
+  return runLocalFallback(file, sanitizedName, options);
+}
+
+/** Backwards-compatible simple upload */
 export async function uploadMediaFile(path: string, file: File): Promise<string> {
   return uploadMediaWithProgress(path, file);
 }
-
-
-

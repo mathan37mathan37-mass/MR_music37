@@ -24,6 +24,7 @@ const PlaylistDetail = lazy(() => import('@/pages/PlaylistDetail'));
 const Stats = lazy(() => import('@/pages/Stats'));
 const Admin = lazy(() => import('@/pages/Admin'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
+const AuthCallback = lazy(() => import('@/pages/AuthCallback'));
 
 function AppLoadingFallback() {
   return (
@@ -94,6 +95,7 @@ export default function App() {
         <Suspense fallback={<AppLoadingFallback />}>
           <Routes>
             <Route path="/admin" element={<AdminGate><Admin /></AdminGate>} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/explore" element={<Explore />} />

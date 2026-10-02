@@ -14,7 +14,15 @@ export function ProtectedRoute({
   title = 'Sign In Required',
   description = 'Sign in or create a free MR music account to view and synchronize your personal music data.',
 }: ProtectedRouteProps) {
-  const { user, openAuthModal, loginAsDemoUser } = useAuthStore();
+  const { user, isLoading, openAuthModal, loginAsDemoUser } = useAuthStore();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (user) {
     return <>{children}</>;

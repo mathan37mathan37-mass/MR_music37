@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Track, Artist, Album } from '@/types';
 import { isFirebaseConfigured } from '@/services/firebase';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import type {
   AdminTab,
   AdminStats,
@@ -25,7 +26,7 @@ import {
   fetchAllArtistsFromFirestore,
   fetchAllAlbumsFromFirestore,
   fetchAllUsersFromFirestore,
-} from '@/services/firestoreService';
+} from '@/services/supabaseService';
 import { getAllMediaKeys, getMediaUrl, isBlobUrlAlive } from '@/services/mediaStorage';
 
 const SEED_USERS: ManagedUser[] = [
@@ -105,9 +106,10 @@ const SEED_USERS: ManagedUser[] = [
   },
 ];
 
-const initialCatalogSongs = isFirebaseConfigured() ? [] as Track[] : initialTracks;
-const initialCatalogArtists = isFirebaseConfigured() ? [] as Artist[] : initialArtists;
-const initialCatalogAlbums = isFirebaseConfigured() ? [] as Album[] : initialAlbums;
+const isLiveBackend = isSupabaseConfigured() || isFirebaseConfigured();
+const initialCatalogSongs = isLiveBackend ? [] as Track[] : initialTracks;
+const initialCatalogArtists = isLiveBackend ? [] as Artist[] : initialArtists;
+const initialCatalogAlbums = isLiveBackend ? [] as Album[] : initialAlbums;
 
 const INITIAL_LOGS: AdminActivityLog[] = [
   {

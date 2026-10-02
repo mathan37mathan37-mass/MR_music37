@@ -12,10 +12,11 @@ createRoot(document.getElementById('root')!).render(
 // ── Register Service Worker ────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    const swUrl = new URL('./sw.js', window.location.href).toString();
+    // Use absolute paths so SW registers correctly even from /auth/callback
+    const swUrl = `${window.location.origin}/sw.js`;
 
     navigator.serviceWorker
-      .register(swUrl, { scope: './' })
+      .register(swUrl, { scope: '/' })
       .then((registration) => {
         console.log('[Melodix SW] Registered:', registration.scope);
       })
@@ -24,3 +25,4 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+

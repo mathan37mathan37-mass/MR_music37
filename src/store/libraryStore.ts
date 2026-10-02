@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Track, Playlist } from '@/types';
 import { tracks, playlists as initialPlaylists, artists } from '@/data/demo';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { isFirebaseConfigured } from '@/services/firebase';
 import {
   syncLike,
@@ -17,7 +18,7 @@ import {
   fetchFollowedArtists,
   syncDownload,
   fetchUserDownloads,
-} from '@/services/firestoreService';
+} from '@/services/supabaseService';
 import { useAuthStore } from '@/store/authStore';
 import { useAdminStore } from '@/store/adminStore';
 
@@ -136,7 +137,9 @@ export const useLibraryStore = create<LibraryState>()(
             fetchUserDownloads(uid),
           ]);
 
-          const fallbackPlaylists = isFirebaseConfigured() ? [] : initialPlaylists;
+          const isLiveBackend = isSupabaseConfigured() || isFirebaseConfigured();
+          const fallbackPlaylists = isLiveBackend ? [] : initialPlaylists;
+
 
           set((state) => ({
             likedSongIds: remoteLikes,

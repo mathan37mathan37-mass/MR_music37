@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Lock, Eye, EyeOff, ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
+import { Shield, Lock, Eye, EyeOff, ArrowLeft, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
-// ── ADMIN PIN CONFIG ─────────────────────────────────────────────────────────
-// Change this to your desired admin password/PIN.
-// In production, validate against Firebase Custom Claims or a server-side check.
-const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || 'melodix-admin-2024';
+// ── LEGACY FALLBACK PIN ───────────────────────────────────────────────────────
+// Only used when neither Supabase nor Firebase is configured (pure demo mode).
+// When Supabase IS configured, admin access requires role = 'admin' in the
+// profiles table — the PIN is never evaluated.
+const LEGACY_PIN = import.meta.env.VITE_ADMIN_PIN || 'melodix-admin-2024';
 const SESSION_KEY = 'melodix_admin_authed';
 
 interface AdminGateProps {
@@ -14,6 +17,7 @@ interface AdminGateProps {
 }
 
 export function AdminGate({ children }: AdminGateProps) {
+  const { user, isLoading: authLoading } = useAuthStore();
   const [isAuthed, setIsAuthed] = useState(false);
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
@@ -32,8 +36,27 @@ export function AdminGate({ children }: AdminGateProps) {
     setLockUntil(null);
   };
 
-  // Check session on mount and clear it on unmount so re-entry always requires the admin password.
+  // ── Role-based auth (Supabase / Firebase) ────────────────────────────────
+  // When a live backend is configured, check the user's role from the profile.
   useEffect(() => {
+    if (isSupabaseConfigured()) {
+      // Supabase path: admin role from profiles table
+      if (!authLoading) {
+        const role = (user as any)?.role;
+        if (role === 'admin') {
+          sessionStorage.setItem(SESSION_KEY, 'true');
+          setIsAuthed(true);
+        } else if (user) {
+          // Authenticated but not admin
+          setIsAuthed(false);
+          setError('Your account does not have admin privileges.');
+        }
+        // Not logged in → fall through to PIN gate below
+      }
+      return;
+    }
+
+    // ── Legacy PIN path (demo / Firebase without role claim) ──────────────
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored === 'true') {
       setIsAuthed(true);
@@ -42,7 +65,8 @@ export function AdminGate({ children }: AdminGateProps) {
     return () => {
       sessionStorage.removeItem(SESSION_KEY);
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   // Countdown timer for lockout
   useEffect(() => {
@@ -66,19 +90,16 @@ export function AdminGate({ children }: AdminGateProps) {
     setIsChecking(true);
     setError('');
 
-    // Simulate a brief verification delay for UX
     await new Promise((res) => setTimeout(res, 500));
 
-    if (pin === ADMIN_PIN) {
+    if (pin === LEGACY_PIN) {
       sessionStorage.setItem(SESSION_KEY, 'true');
       setIsAuthed(true);
     } else {
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
       setPin('');
-
       if (newAttempts >= 5) {
-        // Lock for 2 minutes after 5 failed attempts
         setLockUntil(Date.now() + 2 * 60 * 1000);
         setError('Too many failed attempts. Locked for 2 minutes.');
       } else {
@@ -88,8 +109,68 @@ export function AdminGate({ children }: AdminGateProps) {
     setIsChecking(false);
   };
 
+  // ── Auth loading state ──────────────────────────────────────────────────
+  if (isSupabaseConfigured() && authLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-white">
+          <Loader2 size={32} className="animate-spin text-violet-400" />
+          <p className="text-sm text-white/60">Verifying admin credentials…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Supabase: user is logged in but not an admin ─────────────────────────
+  if (isSupabaseConfigured() && !authLoading && user && (user as any).role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center px-4">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+            <Shield size={28} className="text-red-400" />
+          </div>
+          <h1 className="text-xl font-bold text-white">Access Denied</h1>
+          <p className="text-sm text-white/60">
+            Your account does not have admin privileges. Contact a system administrator.
+          </p>
+          <Link
+            to="/"
+            className="inline-block rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition"
+          >
+            Back to Player
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Supabase: user is not logged in at all ────────────────────────────────
+  if (isSupabaseConfigured() && !authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center px-4">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-violet-600/10 border border-violet-500/20 flex items-center justify-center mx-auto">
+            <Lock size={28} className="text-violet-400" />
+          </div>
+          <h1 className="text-xl font-bold text-white">Admin Login Required</h1>
+          <p className="text-sm text-white/60">
+            Please sign in with an admin account to access the dashboard.
+          </p>
+          <Link
+            to="/"
+            className="inline-block rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition"
+          >
+            Go to Sign In
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Already authed (role-check passed or PIN entered) ──────────────────────
   if (isAuthed) return <>{children}</>;
 
+  // ── Fallback PIN gate (demo / no Supabase) ────────────────────────────────
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center relative overflow-hidden">
       {/* Ambient background */}

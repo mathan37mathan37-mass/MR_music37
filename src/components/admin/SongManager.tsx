@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Music, Plus, Search, Edit2, Trash2, Play, Pause,
@@ -864,7 +864,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
         isOpen={Boolean(deletingSong)}
         title="Delete Song from Catalog"
         description="Are you sure you want to remove this song from the platform catalog? This will delete the song record and remove it from user playlists and libraries."
-        itemName={deletingSong ? `\"${deletingSong.title}\" by ${deletingSong.artist}` : undefined}
+        itemName={deletingSong ? `"${deletingSong.title}" by ${deletingSong.artist}` : undefined}
         confirmLabel="Yes, Delete Song"
         onConfirm={() => {
           if (deletingSong) {

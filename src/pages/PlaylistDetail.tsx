@@ -81,6 +81,22 @@ export default function PlaylistDetail() {
 
   const playlist = resolvedPlaylist ?? localPlaylist ?? null;
 
+  const totalDuration = useMemo(() => {
+    return (playlist?.tracks ?? []).reduce((acc, t) => acc + t.duration, 0);
+  }, [playlist?.tracks]);
+
+  const filteredAvailableTracks = useMemo(() => {
+    const query = songSearch.trim().toLowerCase();
+    if (!query) return allTracks;
+
+    return allTracks.filter((track) =>
+      track.title.toLowerCase().includes(query) ||
+      track.artist.toLowerCase().includes(query) ||
+      track.genre.toLowerCase().includes(query) ||
+      track.album.toLowerCase().includes(query)
+    );
+  }, [songSearch]);
+
   if (!playlist) {
     return (
       <div className="px-6 py-10 max-w-3xl mx-auto">
@@ -99,22 +115,6 @@ export default function PlaylistDetail() {
   }
 
   const isSaved = isPlaylistSaved(playlist.id);
-
-  const totalDuration = useMemo(() => {
-    return playlist.tracks.reduce((acc, t) => acc + t.duration, 0);
-  }, [playlist.tracks]);
-
-  const filteredAvailableTracks = useMemo(() => {
-    const query = songSearch.trim().toLowerCase();
-    if (!query) return allTracks;
-
-    return allTracks.filter((track) =>
-      track.title.toLowerCase().includes(query) ||
-      track.artist.toLowerCase().includes(query) ||
-      track.genre.toLowerCase().includes(query) ||
-      track.album.toLowerCase().includes(query)
-    );
-  }, [songSearch]);
 
   // Handle Drag & Drop reordering
   const handleDragStart = (e: React.DragEvent, index: number) => {

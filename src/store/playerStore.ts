@@ -28,6 +28,7 @@ export interface PlayerState {
   // Actions
   playTrack: (track: Track, newQueue?: Track[]) => void;
   playQueue: (queue: Track[], startIndex?: number) => void;
+  pause: () => void;
   togglePlay: () => void;
   next: () => void;
   prev: () => void;
@@ -114,7 +115,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     isMuted: false,
     progress: 0,
     currentTime: 0,
-    duration: initialTrack?.duration ?? 0,
+    duration: 0,
     shuffle: false,
     repeat: 'none',
     isExpanded: false,
@@ -214,6 +215,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       const fallback = `/audio/track-${((seed - 1) % 16) + 1}.wav`;
       const src = targetTrack.audioUrl || fallback;
       audioEngine.setSource(src, true, seed, targetTrack.duration, targetTrack.title);
+    },
+
+    pause: () => {
+      audioEngine.pause();
+      set({ isPlaying: false });
     },
 
     togglePlay: () => {

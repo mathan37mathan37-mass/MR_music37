@@ -4,6 +4,10 @@ import { isFirebaseConfigured } from '@/services/firebase';
 import { audioEngine } from '@/audio/audioEngine';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAnalyticsStore } from '@/store/analyticsStore';
+import { useSettingsStore } from '@/store/settingsStore';
+import { useAdminStore } from '@/store/adminStore';
+import { useUIStore } from '@/store/uiStore';
+import { tracks as demoTracks } from '@/data/demo';
 
 export interface PlayerState {
   currentTrack: Track | null;
@@ -96,7 +100,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       // Loop to beginning
       get().playTrack(queue[0]);
     } else {
-      // End of queue
+      // End of queue: check autoplay!
+      const isAutoplay = useSettingsStore.getState().autoplay;
+      if (isAutoplay) {
+        const adminSongs = useAdminStore.getState().songs || [];
+        const allAvailable = [...adminSongs, ...demoTracks];
+        const queueIds = new Set(queue.map((t) => t.id));
+        const candidates = allAvailable.filter((t) => !queueIds.has(t.id));
+        const genreMatches = candidates.filter((t) => t.genre === currentTrack.genre);
+        const nextRecommended = genreMatches.length > 0
+          ? genreMatches[Math.floor(Math.random() * genreMatches.length)]
+          : candidates.length > 0
+            ? candidates[Math.floor(Math.random() * candidates.length)]
+            : allAvailable.find((t) => t.id !== currentTrack.id) || currentTrack;
+
+        if (nextRecommended) {
+          useUIStore.getState().addToast(`Autoplaying "${nextRecommended.title}" by ${nextRecommended.artist}`, 'info');
+          get().playTrack(nextRecommended, [...queue, nextRecommended]);
+          return;
+        }
+      }
       set({ isPlaying: false, progress: 0, currentTime: 0 });
     }
   });
@@ -183,11 +206,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       useLibraryStore.getState().addRecentlyPlayed(track);
       useAnalyticsStore.getState().recordPlay(track);
 
-      // Load source – use audioUrl with graceful bundled track fallback
+      // Preload next track for gapless playback
+      const isGapless = useSettingsStore.getState().gaplessPlayback;
+      if (isGapless && currentIndex < queue.length - 1) {
+        const nextT = queue[currentIndex + 1];
+        if (nextT) {
+          const nSeed = parseInt(nextT.id.replace(/\D/g, ''), 10) || 1;
+          const nFallback = `/audio/track-${((nSeed - 1) % 16) + 1}.wav`;
+          audioEngine.preloadNextTrack(nextT.audioUrl || nFallback);
+        }
+      }
+
+      // Load source – pass track.id to check offline cached audio
       const seed = parseInt(track.id.replace(/\D/g, ''), 10) || 1;
       const fallback = `/audio/track-${((seed - 1) % 16) + 1}.wav`;
       const src = track.audioUrl || fallback;
-      audioEngine.setSource(src, true, seed, track.duration, track.title);
+      audioEngine.setSource(src, true, seed, track.duration, track.title, track.id);
     },
 
     playQueue: (newQueue, startIndex = 0) => {
@@ -210,11 +244,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       useLibraryStore.getState().addRecentlyPlayed(targetTrack);
       useAnalyticsStore.getState().recordPlay(targetTrack);
 
-      // Load source – use audioUrl with graceful bundled track fallback
+      // Preload upcoming track for gapless
+      const isGapless = useSettingsStore.getState().gaplessPlayback;
+      if (isGapless && safeStartIndex < safeQueue.length - 1) {
+        const nextT = safeQueue[safeStartIndex + 1];
+        if (nextT) {
+          const nSeed = parseInt(nextT.id.replace(/\D/g, ''), 10) || 1;
+          const nFallback = `/audio/track-${((nSeed - 1) % 16) + 1}.wav`;
+          audioEngine.preloadNextTrack(nextT.audioUrl || nFallback);
+        }
+      }
+
+      // Load source – pass track.id to check offline cached audio
       const seed = parseInt(targetTrack.id.replace(/\D/g, ''), 10) || 1;
       const fallback = `/audio/track-${((seed - 1) % 16) + 1}.wav`;
       const src = targetTrack.audioUrl || fallback;
-      audioEngine.setSource(src, true, seed, targetTrack.duration, targetTrack.title);
+      audioEngine.setSource(src, true, seed, targetTrack.duration, targetTrack.title, targetTrack.id);
     },
 
     pause: () => {
@@ -234,7 +279,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           const seed = parseInt(currentTrack.id.replace(/\D/g, ''), 10) || 1;
           const fallback = `/audio/track-${((seed - 1) % 16) + 1}.wav`;
           const src = currentTrack.audioUrl || fallback;
-          audioEngine.setSource(src, true, seed, currentTrack.duration, currentTrack.title);
+          audioEngine.setSource(src, true, seed, currentTrack.duration, currentTrack.title, currentTrack.id);
         } else {
           audioEngine.play();
         }

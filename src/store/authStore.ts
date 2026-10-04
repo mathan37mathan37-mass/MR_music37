@@ -123,7 +123,7 @@ async function buildProfileFromSupabaseUser(
 const applyUserSession = async (profile: UserProfile | null) => {
   if (!profile) return;
   useLibraryStore.getState().resetUserData(profile.uid);
-  useAnalyticsStore.getState().resetUserData(profile.uid);
+  await useAnalyticsStore.getState().loadUserData(profile.uid);
   await useLibraryStore.getState().loadUserFirestoreData(profile.uid);
 };
 
@@ -184,6 +184,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         handleSessionUser(session.user, event);
       } else if (event === 'SIGNED_OUT') {
         set({ user: null, firebaseUser: null, isLoading: false });
+        useAnalyticsStore.getState().onLogout();
       }
     });
 
@@ -324,7 +325,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       localStorage.setItem('melodix_demo_auth', JSON.stringify(newProfile));
       set({ user: newProfile, isLoading: false, isAuthModalOpen: false });
       useLibraryStore.getState().resetUserData(newProfile.uid);
-      useAnalyticsStore.getState().resetUserData(newProfile.uid);
+      void useAnalyticsStore.getState().loadUserData(newProfile.uid);
     },
 
     // ── Login with Email ───────────────────────────────────────────────────
@@ -374,7 +375,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       localStorage.setItem('melodix_demo_auth', JSON.stringify(simulated));
       set({ user: simulated, isLoading: false, isAuthModalOpen: false });
       useLibraryStore.getState().resetUserData(simulated.uid);
-      useAnalyticsStore.getState().resetUserData(simulated.uid);
+      void useAnalyticsStore.getState().loadUserData(simulated.uid);
     },
 
     // ── Google Login ───────────────────────────────────────────────────────
@@ -431,7 +432,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
           set({ user: profile, isLoading: false, isAuthModalOpen: false });
           useLibraryStore.getState().resetUserData(profile.uid);
-          useAnalyticsStore.getState().resetUserData(profile.uid);
+          void useAnalyticsStore.getState().loadUserData(profile.uid);
         } catch (err: any) {
           set({ isLoading: false });
           throw new Error(err.message || 'Google sign in failed');
@@ -455,14 +456,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
       localStorage.setItem('melodix_demo_auth', JSON.stringify(googleUser));
       set({ user: googleUser, isLoading: false, isAuthModalOpen: false });
       useLibraryStore.getState().resetUserData(googleUser.uid);
-      useAnalyticsStore.getState().resetUserData(googleUser.uid);
+      void useAnalyticsStore.getState().loadUserData(googleUser.uid);
     },
 
     loginAsDemoUser: () => {
       localStorage.setItem('melodix_demo_auth', JSON.stringify(DEMO_USER));
       set({ user: DEMO_USER, isAuthModalOpen: false });
       useLibraryStore.getState().resetUserData(DEMO_USER.uid);
-      useAnalyticsStore.getState().resetUserData(DEMO_USER.uid);
+      void useAnalyticsStore.getState().loadUserData(DEMO_USER.uid);
     },
 
     // ── Logout ─────────────────────────────────────────────────────────────
@@ -487,6 +488,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ user: null, firebaseUser: null, isLoading: false });
       useLibraryStore.getState().clearRecentlyPlayed();
       useLibraryStore.getState().clearRecentSearches();
+      useAnalyticsStore.getState().onLogout();
     },
 
     // ── Delete Account ─────────────────────────────────────────────────────
@@ -511,6 +513,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ user: null, firebaseUser: null, isLoading: false });
       useLibraryStore.getState().clearRecentlyPlayed();
       useLibraryStore.getState().clearRecentSearches();
+      useAnalyticsStore.getState().onLogout();
     },
 
     // ── Password Reset ─────────────────────────────────────────────────────

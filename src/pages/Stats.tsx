@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clock, Play, Music, Flame, Award, Calendar, BarChart3,
@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { useAnalyticsStore } from '@/store/analyticsStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
+import { useAdminStore } from '@/store/adminStore';
 import { tracks as allTracks, artists as allArtists } from '@/data/demo';
 import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
@@ -28,10 +29,14 @@ export default function Stats() {
     playCounts,
     genrePlayCounts,
     artistPlayCounts,
+    listeningHistory,
   } = useAnalyticsStore();
 
   const { playTrack, currentTrack, isPlaying } = usePlayerStore();
   const { likedSongIds, isSongLiked, toggleLikeSong } = useLibraryStore();
+  const { songs: adminSongs } = useAdminStore();
+
+  const combinedCatalog = useMemo(() => [...adminSongs, ...allTracks], [adminSongs]);
 
   const [hoveredDay, setHoveredDay] = useState<{ day: string; minutes: number; date: string } | null>(null);
   const [achievementFilter, setAchievementFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
@@ -52,10 +57,25 @@ export default function Stats() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([trackId, plays]) => {
-      const track = allTracks.find((t) => t.id === trackId || t.id === `t${trackId}`);
+      const track =
+        combinedCatalog.find((t) => t.id === trackId || t.id === `t${trackId}`) ||
+        (() => {
+          const hist = listeningHistory.find((h) => h.trackId === trackId);
+          if (!hist) return null;
+          return {
+            id: hist.trackId,
+            title: hist.title,
+            artist: hist.artist,
+            genre: hist.genre,
+            coverUrl: hist.coverUrl,
+            duration: hist.duration,
+            audioUrl: '',
+            album: 'Single',
+          };
+        })();
       return track ? { track, plays } : null;
     })
-    .filter((item): item is { track: (typeof allTracks)[0]; plays: number } => Boolean(item))
+    .filter((item): item is { track: any; plays: number } => Boolean(item))
     .filter((item, idx, arr) => arr.findIndex((x) => x.track.id === item.track.id) === idx)
     .slice(0, 5);
 

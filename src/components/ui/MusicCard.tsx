@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Heart, MoreHorizontal, Music, ListPlus, CornerDownRight,
-  DownloadCloud, Check, ListMusic, Trash2
+  DownloadCloud, Check, ListMusic, Trash2, HardDriveDownload
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { formatDuration, formatLargeNumber } from '@/utils/cn';
@@ -23,11 +23,12 @@ interface MusicCardProps {
 
 export function MusicCard({ track, index, showIndex, className, onRemove, removeTooltip, queue }: MusicCardProps) {
   const { playTrack, playQueue, currentTrack, isPlaying, togglePlay, addToQueue, playNext, toggleLike } = usePlayerStore();
-  const { toggleDownload, userPlaylists, addSongToPlaylist } = useLibraryStore();
+  const { toggleDownload, downloadTrackFile, userPlaylists, addSongToPlaylist } = useLibraryStore();
   const isLiked = useLibraryStore((s) => s.likedSongIds.includes(track.id));
   const isDown = useLibraryStore((s) => s.downloadedTrackIds.includes(track.id));
   const { addToast } = useUIStore();
   const [showMenu, setShowMenu] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -93,9 +94,23 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
 
   const handleToggleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const downloaded = toggleDownload(track.id);
     setShowMenu(false);
-    addToast(downloaded ? `Downloaded "${track.title}" for offline` : `Removed download "${track.title}"`, 'success');
+    if (isDown) {
+      toggleDownload(track);
+      addToast(`Removed "${track.title}" from downloads`, 'info');
+    } else {
+      setIsDownloading(true);
+      toggleDownload(track, false); // cache in IndexedDB for offline playback
+      addToast(`Downloading "${track.title}" for offline playback…`, 'info');
+      setTimeout(() => setIsDownloading(false), 2000);
+    }
+  };
+
+  const handleSaveToDisk = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    downloadTrackFile(track);
+    addToast(`Saving "${track.title}" to your device…`, 'success');
   };
 
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -108,7 +123,7 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
     <motion.div
       whileHover={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
       className={cn(
-        'group relative flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-colors',
+        'group relative flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-colors music-card-row',
         isActive && 'bg-white/5',
         className
       )}
@@ -143,7 +158,7 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
       </div>
 
       {/* Cover Art */}
-      <div className="relative w-11 h-11 flex-shrink-0 rounded-lg overflow-hidden shadow">
+      <div className="relative w-11 h-11 flex-shrink-0 rounded-lg overflow-hidden shadow music-card-cover">
         <img
           src={track.coverUrl}
           alt={track.album}
@@ -157,6 +172,7 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
           <div className="absolute inset-0 bg-violet-600/20" />
         )}
       </div>
+
 
       {/* Info */}
       <div className="flex-1 min-w-0">
@@ -250,8 +266,15 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
                     onClick={handleToggleDownload}
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-overlay)] flex items-center gap-2.5 transition-colors"
                   >
-                    <DownloadCloud size={14} className={isDown ? 'text-emerald-400' : 'text-white/40'} />
-                    {isDown ? 'Remove Download' : 'Download Offline'}
+                    <DownloadCloud size={14} className={isDownloading ? 'text-violet-400 animate-bounce' : isDown ? 'text-emerald-400' : 'text-white/40'} />
+                    {isDownloading ? 'Downloading…' : isDown ? 'Remove Download' : 'Download Offline'}
+                  </button>
+                  <button
+                    onClick={handleSaveToDisk}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-overlay)] flex items-center gap-2.5 transition-colors"
+                  >
+                    <HardDriveDownload size={14} className="text-cyan-400" />
+                    Save to Device
                   </button>
                 </div>
 

@@ -92,11 +92,33 @@ export default function Settings() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Human-readable labels for setting change toasts
+  const settingLabels: Record<string, (val: any) => string> = {
+    compactMode: (v) => v ? 'Compact Mode enabled' : 'Compact Mode disabled',
+    autoplay: (v) => v ? 'Autoplay enabled — similar music will continue when queue ends' : 'Autoplay disabled',
+    crossfade: (v) => v ? 'Crossfade enabled — tracks will blend together' : 'Crossfade disabled',
+    gaplessPlayback: (v) => v ? 'Gapless Playback enabled — zero pauses between tracks' : 'Gapless Playback disabled',
+    normalizeVolume: (v) => v ? 'Volume Normalization enabled' : 'Volume Normalization disabled',
+    notifications: (v) => v ? 'Notifications enabled' : 'All notifications muted',
+    notifyNewReleases: (v) => v ? 'New Releases alerts on' : 'New Releases alerts off',
+    notifyRecommendations: (v) => v ? 'Recommendations alerts on' : 'Recommendations alerts off',
+    notifyPlaylistUpdates: (v) => v ? 'Playlist Update alerts on' : 'Playlist Update alerts off',
+    publicProfile: (v) => v ? 'Profile is now public' : 'Profile is now private',
+    publicPlaylists: (v) => v ? 'Playlists are now public' : 'Playlists are now private',
+    shareListeningActivity: (v) => v ? 'Listening activity is now visible to followers' : 'Listening activity hidden',
+    showRecentlyPlayed: (v) => v ? 'Recently Played visible on your profile' : 'Recently Played hidden from profile',
+    crossfadeDuration: (v) => `Crossfade duration set to ${v}s`,
+  };
+
   // Sync setting helper
   const handleSettingChange = (key: any, val: any) => {
     setSetting(key, val);
     if (user) {
       updatePreferences({ [key]: val } as any);
+    }
+    const label = settingLabels[key];
+    if (label) {
+      addToast(label(val), 'success');
     }
   };
 

@@ -1,3 +1,5 @@
+import { getOfflineTrackAudioUrl } from './downloadService';
+
 // IndexedDB storage for offline audio files and large assets
 // Prevents localStorage 5MB quota errors and provides persistent audio playback across page reloads
 
@@ -146,9 +148,22 @@ export async function isBlobUrlAlive(blobUrl: string): Promise<boolean> {
 export async function resolveAudioSource(
   src?: string,
   trackTitle?: string,
-  trackSeed = 1
+  trackSeed = 1,
+  trackId?: string
 ): Promise<string> {
   const fallbackTrack = `/audio/track-${((trackSeed - 1) % 16) + 1}.wav`;
+
+  // 0. Check if offline downloaded audio blob is available in IndexedDB
+  if (trackId) {
+    try {
+      const offlineUrl = await getOfflineTrackAudioUrl(trackId);
+      if (offlineUrl) {
+        return offlineUrl;
+      }
+    } catch {
+      // continue normal resolution
+    }
+  }
 
   if (!src) {
     return fallbackTrack;

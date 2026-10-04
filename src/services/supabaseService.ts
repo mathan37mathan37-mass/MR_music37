@@ -902,3 +902,61 @@ export async function fetchUserRole(uid: string): Promise<'user' | 'admin'> {
     return 'user';
   }
 }
+
+// ── 12. USER ANALYTICS ────────────────────────────────────────────────────────
+
+export async function syncUserAnalytics(uid: string, analyticsData: any): Promise<void> {
+  if (!uid || uid === 'guest') return;
+
+  setLocal(localKey('analytics', uid), analyticsData);
+
+  if (!isSupabaseConfigured() || !supabase) return;
+
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('preferences')
+      .eq('id', uid)
+      .maybeSingle();
+
+    const currentPref = data?.preferences || {};
+    const updatedPref = { ...currentPref, analytics: analyticsData };
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ preferences: updatedPref, updated_at: new Date().toISOString() })
+      .eq('id', uid);
+
+    if (error) console.warn('Supabase syncUserAnalytics error:', error.message);
+  } catch (err) {
+    console.warn('syncUserAnalytics threw:', err);
+  }
+}
+
+export async function fetchUserAnalytics(uid: string): Promise<any | null> {
+  if (!uid || uid === 'guest') return null;
+
+  const localCached = getLocal<any | null>(localKey('analytics', uid), null);
+
+  if (!isSupabaseConfigured() || !supabase) {
+    return localCached;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('preferences')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (!error && data?.preferences?.analytics) {
+      setLocal(localKey('analytics', uid), data.preferences.analytics);
+      return data.preferences.analytics;
+    }
+
+    return localCached;
+  } catch (err) {
+    console.warn('fetchUserAnalytics threw:', err);
+    return localCached;
+  }
+}

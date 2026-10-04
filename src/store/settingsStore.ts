@@ -110,6 +110,13 @@ export const useSettingsStore = create<SettingsState>()(
         if (key === 'audioQuality') {
           audioEngine.setAudioQuality(value as any);
         }
+        if (key === 'normalizeVolume') {
+          audioEngine.setNormalizeVolume(Boolean(value));
+        }
+        if (key === 'crossfade' || key === 'crossfadeDuration') {
+          const { crossfade, crossfadeDuration } = get();
+          audioEngine.setCrossfade(crossfade, crossfadeDuration);
+        }
       },
 
       applyTheme: () => {
@@ -124,6 +131,12 @@ export const useSettingsStore = create<SettingsState>()(
         state.applyTheme();
         if (state.audioQuality) {
           audioEngine.setAudioQuality(state.audioQuality);
+        }
+        if (typeof state.normalizeVolume === 'boolean') {
+          audioEngine.setNormalizeVolume(state.normalizeVolume);
+        }
+        if (typeof state.crossfade === 'boolean') {
+          audioEngine.setCrossfade(state.crossfade, state.crossfadeDuration || 4);
         }
       },
       partialize: (s) => ({

@@ -485,3 +485,21 @@ input[type="range"]:active::-webkit-slider-thumb {
   padding: 0.75rem !important;
 }
 
+/* Compact mode: MusicCard rows use tighter padding */
+[data-compact="true"] .music-card-row {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+/* Compact mode: shrink cover art */
+[data-compact="true"] .music-card-cover {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+}
+
+/* Compact mode: shrink section gaps */
+[data-compact="true"] .section-gap {
+  gap: 0.75rem !important;
+  margin-bottom: 1rem !important;
+}
+

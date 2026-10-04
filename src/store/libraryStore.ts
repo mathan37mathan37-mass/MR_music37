@@ -21,6 +21,11 @@ import {
 } from '@/services/supabaseService';
 import { useAuthStore } from '@/store/authStore';
 import { useAdminStore } from '@/store/adminStore';
+import {
+  downloadTrackForOffline,
+  removeOfflineTrack,
+  triggerFileDownload,
+} from '@/services/downloadService';
 
 export interface RecentlyPlayedItem {
   track: Track;
@@ -62,8 +67,9 @@ interface LibraryState {
   isFollowingArtist: (artistId: string) => boolean;
 
   // Downloads actions
-  toggleDownload: (trackId: string) => boolean;
+  toggleDownload: (track: Track | string, saveToDisk?: boolean) => boolean;
   isDownloaded: (trackId: string) => boolean;
+  downloadTrackFile: (track: Track) => void;
 
   // Recently played actions
   addRecentlyPlayed: (track: Track) => void;
@@ -367,7 +373,8 @@ export const useLibraryStore = create<LibraryState>()(
         return get().followedArtistIds.includes(artistId);
       },
 
-      toggleDownload: (trackId) => {
+      toggleDownload: (trackOrId, saveToDisk = false) => {
+        const trackId = typeof trackOrId === 'string' ? trackOrId : trackOrId.id;
         const { downloadedTrackIds } = get();
         const isDown = downloadedTrackIds.includes(trackId);
         const nextDown = isDown
@@ -376,11 +383,29 @@ export const useLibraryStore = create<LibraryState>()(
 
         set({ downloadedTrackIds: nextDown });
 
+        if (!isDown) {
+          // Find full track object and cache for offline
+          let fullTrack: Track | undefined = typeof trackOrId !== 'string' ? trackOrId : undefined;
+          if (!fullTrack) {
+            const adminSongs = useAdminStore.getState().songs || [];
+            fullTrack = adminSongs.find((t) => t.id === trackId) || tracks.find((t) => t.id === trackId);
+          }
+          if (fullTrack) {
+            downloadTrackForOffline(fullTrack, saveToDisk);
+          }
+        } else {
+          removeOfflineTrack(trackId);
+        }
+
         const currentUser = useAuthStore.getState().user;
         if (currentUser) {
           syncDownload(currentUser.uid, trackId, !isDown);
         }
         return !isDown;
+      },
+
+      downloadTrackFile: (track) => {
+        triggerFileDownload(track);
       },
 
       isDownloaded: (trackId) => {

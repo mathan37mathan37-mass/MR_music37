@@ -28,6 +28,14 @@ class AudioEngine {
   private qualityGain: GainNode | null = null;
   private currentQuality: AudioQuality = 'high';
 
+  // Playback settings
+  private normalizeVolumeEnabled = true;
+  private crossfadeEnabled = false;
+  private crossfadeDuration = 4;
+  private preloadAudio: HTMLAudioElement | null = null;
+  private isFading = false;
+  private baseVolume = 0.8;
+
   // Per-track seed for unique synthesized music
   private trackSeed = 1;
   private trackDuration = 210;
@@ -232,17 +240,81 @@ class AudioEngine {
         this.qualityGain.gain.setTargetAtTime(0.95, now, 0.04);
         break;
     }
+
+    if (this.normalizeVolumeEnabled && this.qualityCompressor) {
+      // Automatic loudness normalization: balances peaks and lifts quiet passages
+      this.qualityCompressor.threshold.setTargetAtTime(-20, now, 0.04);
+      this.qualityCompressor.ratio.setTargetAtTime(4.0, now, 0.04);
+      this.qualityCompressor.knee.setTargetAtTime(20, now, 0.04);
+    }
   }
 
-  public async setSource(src: string, autoPlay = true, seed = 1, duration = 210, trackTitle?: string): Promise<void> {
+  public setNormalizeVolume(enabled: boolean): void {
+    this.normalizeVolumeEnabled = enabled;
+    if (this.audioCtx) {
+      this.applyQualityDSP(this.currentQuality);
+    }
+  }
+
+  public setCrossfade(enabled: boolean, duration = 4): void {
+    this.crossfadeEnabled = enabled;
+    this.crossfadeDuration = Math.max(1, Math.min(12, duration));
+  }
+
+  public preloadNextTrack(src: string): void {
+    try {
+      if (!this.preloadAudio) {
+        this.preloadAudio = new Audio();
+        this.preloadAudio.preload = 'auto';
+      }
+      this.preloadAudio.src = src;
+      this.preloadAudio.load();
+    } catch {
+      // Ignore preload errors
+    }
+  }
+
+  public async fadeOut(duration = 2): Promise<void> {
+    if (this.isFading) return;
+    this.isFading = true;
+    const startVol = this.audio.volume;
+    const steps = 20;
+    const stepTime = (duration * 1000) / steps;
+    for (let i = steps; i >= 0; i--) {
+      this.audio.volume = Math.max(0, (startVol * i) / steps);
+      await new Promise((r) => setTimeout(r, stepTime));
+    }
+    this.isFading = false;
+  }
+
+  public async fadeIn(targetVolume = 0.8, duration = 2): Promise<void> {
+    this.isFading = true;
+    this.audio.volume = 0;
+    const steps = 20;
+    const stepTime = (duration * 1000) / steps;
+    for (let i = 1; i <= steps; i++) {
+      this.audio.volume = Math.min(1, (targetVolume * i) / steps);
+      await new Promise((r) => setTimeout(r, stepTime));
+    }
+    this.isFading = false;
+  }
+
+  public async setSource(
+    src: string,
+    autoPlay = true,
+    seed = 1,
+    duration = 210,
+    trackTitle?: string,
+    trackId?: string
+  ): Promise<void> {
     this.stopSynthFallback();
     this.trackSeed = seed;
     this.trackDuration = duration;
 
-    // Resolve persistent idb://, dead blob://, or missing URLs into live audio streams
+    // Resolve persistent idb://, offline cache, dead blob://, or missing URLs into live audio streams
     let resolvedSrc = src;
     try {
-      resolvedSrc = await resolveAudioSource(src, trackTitle, seed);
+      resolvedSrc = await resolveAudioSource(src, trackTitle, seed, trackId);
     } catch (e) {
       console.warn('[AudioEngine] Error resolving audio source:', e);
       resolvedSrc = `/audio/track-${((seed - 1) % 16) + 1}.wav`;
@@ -264,6 +336,9 @@ class AudioEngine {
     }
 
     if (autoPlay) {
+      if (this.crossfadeEnabled) {
+        this.fadeIn(this.baseVolume, Math.min(this.crossfadeDuration, 2.5));
+      }
       return this.play();
     }
     return Promise.resolve();
@@ -315,7 +390,10 @@ class AudioEngine {
 
   public setVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume));
-    this.audio.volume = clamped;
+    this.baseVolume = clamped;
+    if (!this.isFading) {
+      this.audio.volume = clamped;
+    }
   }
 
   public setMuted(muted: boolean): void {

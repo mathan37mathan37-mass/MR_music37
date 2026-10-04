@@ -8,6 +8,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { useSettingsStore, type AudioQuality } from '@/store/settingsStore';
 import { SleepTimerModal } from '@/components/ui/SleepTimerModal';
 import { ShareModal } from '@/components/ui/ShareModal';
 import { formatDuration } from '@/utils/cn';
@@ -41,10 +42,27 @@ export function MusicPlayer() {
     addToast
   } = useUIStore();
 
+  const { audioQuality, setSetting } = useSettingsStore();
+
   const [isSleepOpen, setIsSleepOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   if (!currentTrack) return null;
+
+  const cycleQuality = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const qualities: AudioQuality[] = ['low', 'normal', 'high', 'lossless'];
+    const nextIdx = (qualities.indexOf(audioQuality) + 1) % qualities.length;
+    const nextQ = qualities[nextIdx];
+    const labels: Record<AudioQuality, string> = {
+      low: 'Low (96 kbps)',
+      normal: 'Normal (160 kbps)',
+      high: 'High (320 kbps)',
+      lossless: 'Lossless (FLAC 24-bit)',
+    };
+    setSetting('audioQuality', nextQ);
+    addToast(`Streaming quality: ${labels[nextQ]}`, 'success');
+  };
 
   const progressPercent = Math.min(100, Math.max(0, progress * 100));
   const volumePercent = isMuted ? 0 : volume * 100;
@@ -87,9 +105,27 @@ export function MusicPlayer() {
           >
             {currentTrack.title}
           </p>
-          <p className="text-xs text-white/50 truncate hover:text-white/80 transition-colors cursor-pointer">
-            {currentTrack.artist}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-white/50 truncate hover:text-white/80 transition-colors cursor-pointer">
+              {currentTrack.artist}
+            </p>
+            <button
+              onClick={cycleQuality}
+              title={`Streaming Audio Quality: ${audioQuality.toUpperCase()} (Click to cycle)`}
+              className={cn(
+                "px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase tracking-wider border transition-all flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95",
+                audioQuality === 'lossless'
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/20"
+                  : audioQuality === 'high'
+                    ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                    : audioQuality === 'normal'
+                      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                      : "bg-white/10 text-white/60 border-white/20"
+              )}
+            >
+              {audioQuality === 'lossless' ? 'Lossless' : audioQuality === 'high' ? '320k' : audioQuality === 'normal' ? '160k' : '96k'}
+            </button>
+          </div>
         </div>
 
         <button

@@ -9,8 +9,8 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { useAdminStore } from '@/store/adminStore';
 import { CreatePlaylistModal } from '@/components/ui/CreatePlaylistModal';
-import { tracks as allTracks } from '@/data/demo';
 import { fetchPublicPlaylistsFromFirestore } from '@/services/firestoreService';
 import { formatDuration, formatTotalDuration } from '@/utils/cn';
 import type { Playlist } from '@/types';
@@ -33,6 +33,7 @@ export default function PlaylistDetail() {
 
   const { playTrack, playQueue } = usePlayerStore();
   const { addToast } = useUIStore();
+  const adminSongs = useAdminStore((s) => s.songs);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddSongsOpen, setIsAddSongsOpen] = useState(false);
@@ -87,15 +88,15 @@ export default function PlaylistDetail() {
 
   const filteredAvailableTracks = useMemo(() => {
     const query = songSearch.trim().toLowerCase();
-    if (!query) return allTracks;
+    if (!query) return adminSongs;
 
-    return allTracks.filter((track) =>
+    return adminSongs.filter((track) =>
       track.title.toLowerCase().includes(query) ||
       track.artist.toLowerCase().includes(query) ||
       track.genre.toLowerCase().includes(query) ||
       track.album.toLowerCase().includes(query)
     );
-  }, [songSearch]);
+  }, [songSearch, adminSongs]);
 
   if (!playlist) {
     return (

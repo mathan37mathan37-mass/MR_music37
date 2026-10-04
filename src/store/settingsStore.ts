@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { audioEngine } from '@/audio/audioEngine';
 
 export type Theme = 'dark' | 'light' | 'system';
 export type AccentColor = 'violet' | 'pink' | 'cyan' | 'green' | 'orange';
@@ -106,6 +107,9 @@ export const useSettingsStore = create<SettingsState>()(
         if (key === 'compactMode') {
           get().applyTheme();
         }
+        if (key === 'audioQuality') {
+          audioEngine.setAudioQuality(value as any);
+        }
       },
 
       applyTheme: () => {
@@ -118,6 +122,9 @@ export const useSettingsStore = create<SettingsState>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.applyTheme();
+        if (state.audioQuality) {
+          audioEngine.setAudioQuality(state.audioQuality);
+        }
       },
       partialize: (s) => ({
         theme: s.theme,

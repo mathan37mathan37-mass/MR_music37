@@ -37,6 +37,8 @@ export interface UserProfile {
   preferences: UserPreferences;
   createdAt: number;
   updatedAt: number;
+  role?: 'user' | 'admin' | 'creator';
+  status?: 'active' | 'blocked';
 }
 
 export type AuthModalTab = 'login' | 'signup' | 'forgot_password';

@@ -252,8 +252,8 @@ CREATE POLICY "profiles_insert_own"
 CREATE POLICY "profiles_update_own"
   ON public.profiles FOR UPDATE
   TO authenticated
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
+  USING (id = auth.uid() OR public.is_admin())
+  WITH CHECK (id = auth.uid() OR public.is_admin());
 
 CREATE POLICY "profiles_delete_admin"
   ON public.profiles FOR DELETE
@@ -312,7 +312,7 @@ CREATE POLICY "albums_delete_admin" ON public.albums FOR DELETE  TO authenticate
 -- ── liked_songs ──────────────────────────────────────────────────────────────
 ALTER TABLE public.liked_songs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "liked_songs_select_own" ON public.liked_songs FOR SELECT  TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "liked_songs_select_own" ON public.liked_songs FOR SELECT  TO authenticated USING (user_id = auth.uid() OR public.is_admin());
 CREATE POLICY "liked_songs_insert_own" ON public.liked_songs FOR INSERT  TO authenticated WITH CHECK (user_id = auth.uid());
 CREATE POLICY "liked_songs_delete_own" ON public.liked_songs FOR DELETE  TO authenticated USING (user_id = auth.uid());
 
@@ -344,11 +344,11 @@ CREATE POLICY "follows_delete_own"           ON public.follows FOR DELETE  TO au
 -- ── playlists ────────────────────────────────────────────────────────────────
 ALTER TABLE public.playlists ENABLE ROW LEVEL SECURITY;
 
--- Owners see all their playlists; others see only public ones
+-- Owners see all their playlists; others see only public ones; admins see all for analytics
 CREATE POLICY "playlists_select_own_or_public"
   ON public.playlists FOR SELECT
   TO authenticated
-  USING (user_id = auth.uid() OR is_public = true);
+  USING (user_id = auth.uid() OR is_public = true OR public.is_admin());
 
 CREATE POLICY "playlists_insert_own"
   ON public.playlists FOR INSERT
@@ -400,7 +400,7 @@ CREATE POLICY "playlist_songs_delete_owner"
 -- ── listening_history ────────────────────────────────────────────────────────
 ALTER TABLE public.listening_history ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "history_select_own" ON public.listening_history FOR SELECT  TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "history_select_own" ON public.listening_history FOR SELECT  TO authenticated USING (user_id = auth.uid() OR public.is_admin());
 CREATE POLICY "history_insert_own" ON public.listening_history FOR INSERT  TO authenticated WITH CHECK (user_id = auth.uid());
 CREATE POLICY "history_delete_own" ON public.listening_history FOR DELETE  TO authenticated USING (user_id = auth.uid());
 

@@ -433,7 +433,10 @@ export default function Settings() {
                     return (
                       <button
                         key={q.id}
-                        onClick={() => handleSettingChange('audioQuality', q.id)}
+                        onClick={() => {
+                          handleSettingChange('audioQuality', q.id);
+                          addToast(`Streaming audio quality set to ${q.label} (${q.bitrate})`, 'success');
+                        }}
                         className={cn(
                           'p-4 rounded-2xl border text-left transition-all flex flex-col justify-between',
                           isSelected

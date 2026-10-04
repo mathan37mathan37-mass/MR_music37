@@ -425,18 +425,6 @@ export async function fetchUserRecentlyPlayedEntries(userId: string): Promise<{ 
   }
 }
 
-export async function fetchAllSongsFromFirestore(): Promise<Track[]> {
-  if (!isFirebaseConfigured() || !db) return [];
-
-  try {
-    const snap = await getDocs(collection(db, 'songs'));
-    return snap.docs.map((docSnap) => docSnap.data() as Track);
-  } catch (err) {
-    console.warn('Firestore fetchAllSongs error:', err);
-    return [];
-  }
-}
-
 export async function fetchAllArtistsFromFirestore(): Promise<any[]> {
   if (!isFirebaseConfigured() || !db) return [];
 
@@ -509,28 +497,7 @@ export async function fetchAllUsersFromFirestore(): Promise<ManagedUser[]> {
   }
 }
 
-// ── 6. ADMIN CATALOG MANAGEMENT (Firestore collections: songs, artists, albums) ──
-export async function adminSyncSongToFirestore(song: Track): Promise<void> {
-  if (!isFirebaseConfigured() || !db) return;
-  try {
-    await setDoc(doc(db, 'songs', song.id), {
-      ...song,
-      updatedAt: Date.now(),
-    }, { merge: true });
-  } catch (err) {
-    console.warn('adminSyncSongToFirestore error:', err);
-  }
-}
-
-export async function adminDeleteSongFromFirestore(songId: string): Promise<void> {
-  if (!isFirebaseConfigured() || !db) return;
-  try {
-    await deleteDoc(doc(db, 'songs', songId));
-  } catch (err) {
-    console.warn('adminDeleteSongFromFirestore error:', err);
-  }
-}
-
+// ── 6. ADMIN CATALOG MANAGEMENT (Firestore collections: artists, albums) ─────
 export async function adminSyncArtistToFirestore(artist: any): Promise<void> {
   if (!isFirebaseConfigured() || !db) return;
   try {

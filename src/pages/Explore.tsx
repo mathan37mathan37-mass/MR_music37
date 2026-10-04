@@ -19,7 +19,7 @@ export default function Explore() {
   const { songs: adminSongs } = useAdminStore();
 
   const chartTracks = useMemo(() => {
-    const catalog = isFirebaseConfigured() ? adminSongs : tracks;
+    const catalog = adminSongs;
 
     if (catalog.length === 0) return [];
 

@@ -1,21 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Shuffle, Sparkles, BarChart3, ArrowRight, Flame, Compass, Info } from 'lucide-react';
+import { Play, Pause, Sparkles, BarChart3, ArrowRight, Flame, Compass, Music2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { AlbumCard } from '@/components/ui/AlbumCard';
-import { ArtistCard } from '@/components/ui/ArtistCard';
 import { PlaylistCard } from '@/components/ui/PlaylistCard';
 import { MusicCard } from '@/components/ui/MusicCard';
-import { tracks, albums, artists, genres, moodPlaylists, quickPlayItems, playlists } from '@/data/demo';
-import { isFirebaseConfigured } from '@/services/firebase';
+import { genres, moodPlaylists, playlists } from '@/data/demo';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAnalyticsStore } from '@/store/analyticsStore';
 import { useAdminStore } from '@/store/adminStore';
 import { useSettingsStore } from '@/store/settingsStore';
-import { useAuthStore } from '@/store/authStore';
-import { getRecommendations } from '@/utils/recommendations';
 import { getTimeOfDay } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 import type { Track } from '@/types';
@@ -29,10 +24,21 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+// Seeded pseudorandom shuffle: deterministic per seed so sections remain stable across re-renders
+function seededShuffle(arr: Track[], seed: number): Track[] {
+  const copy = [...arr];
+  let s = seed;
+  for (let i = copy.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const j = Math.abs(s) % (i + 1);
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 export default function Home() {
   const navigate = useNavigate();
-  const [quickPlayVisibleCount, setQuickPlayVisibleCount] = useState(5);
-  const [quickPlayQueue, setQuickPlayQueue] = useState<Track[] | null>(null);
+  const [quickPlayVisibleCount, setQuickPlayVisibleCount] = useState(6);
   const theme = useSettingsStore((s) => s.theme);
   const { playQueue, playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore();
   const isLightMode =
@@ -47,93 +53,49 @@ export default function Home() {
       return true;
     });
   };
-  const { likedSongIds, recentlyPlayed, followedArtistIds, userPlaylists } = useLibraryStore();
-  const currentUser = useAuthStore((s) => s.user);
-  const { songs: adminSongs, albums: adminAlbums } = useAdminStore();
-  const {
-    playCounts,
-    genrePlayCounts,
-    artistPlayCounts,
-    currentStreakDays,
-    totalListeningSeconds,
-  } = useAnalyticsStore();
 
-  // Compute transparent rule-based recommendations
-  const recentTracks = recentlyPlayed.map((item) => item.track);
-  const recommendations = getRecommendations(
-    likedSongIds,
-    recentTracks,
-    followedArtistIds,
-    playCounts,
-    genrePlayCounts,
-    artistPlayCounts,
-    userPlaylists,
-    currentUser?.favoriteGenres || [],
-    currentUser?.favoriteArtists || []
-  );
+  const { songs: adminSongs } = useAdminStore();
+  const { playCounts, currentStreakDays, totalListeningSeconds } = useAnalyticsStore();
+
+  const allTracks = useMemo(() => dedupeTracks([...adminSongs]), [adminSongs]);
+
+  // Distribute randomized songs to different sections using distinct seeds
+  const quickPlayTracks = useMemo(() => seededShuffle(allTracks, 42).slice(0, 12), [allTracks]);
+  const madeForYouTracks = useMemo(() => seededShuffle(allTracks, 99).slice(0, 6), [allTracks]);
+  const newReleaseTracks = useMemo(() => {
+    // Sort primarily by year or playCount, then shuffle top 10
+    const sorted = [...allTracks].sort((a, b) => (b.year || 0) - (a.year || 0) || (b.playCount || 0) - (a.playCount || 0));
+    return seededShuffle(sorted, 137).slice(0, 5);
+  }, [allTracks]);
+
+  const trendingTracks = useMemo(() => {
+    const sorted = [...allTracks].sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0) || (b.playCount || 0) - (a.playCount || 0));
+    return seededShuffle(sorted, 555).slice(0, 5);
+  }, [allTracks, playCounts]);
+
+  const youMayAlsoLikeTracks = useMemo(() => {
+    const usedIds = new Set([...madeForYouTracks.map((t) => t.id), ...trendingTracks.map((t) => t.id)]);
+    const pool = allTracks.filter((t) => !usedIds.has(t.id));
+    return seededShuffle(pool.length > 0 ? pool : allTracks, 777).slice(0, 5);
+  }, [allTracks, madeForYouTracks, trendingTracks]);
+
+  const becauseYouListenedToTracks = useMemo(() => {
+    return seededShuffle(allTracks, 321).slice(0, 5);
+  }, [allTracks]);
 
   const totalHours = Math.round((totalListeningSeconds / 3600) * 10) / 10;
+  const visibleQuickPlay = quickPlayTracks.slice(0, quickPlayVisibleCount);
+  const remainingQuickPlayCount = Math.max(0, quickPlayTracks.length - quickPlayVisibleCount);
 
-  const baseFallbackTracks = isFirebaseConfigured() ? [] : tracks;
-  const allTracks = dedupeTracks([...adminSongs, ...baseFallbackTracks]);
-  const recentlyAddedTracks = [...allTracks]
-    .sort((a, b) => (b.year || 0) - (a.year || 0))
-    .slice(0, 15);
-
-  const userTrendingTracks = [...allTracks]
-    .map((track) => ({
-      ...track,
-      userPlays: playCounts[track.id] || 0,
-    }))
-    .sort((a, b) => b.userPlays - a.userPlays || b.playCount - a.playCount)
-    .slice(0, 6);
-
-  const newestReleaseTracks = dedupeTracks(recentlyAddedTracks).slice(0, 8);
-
-  const personalizedQuickPlayTracks = dedupeTracks([
-    ...recommendations.madeForYou,
-    ...(currentUser?.favoriteGenres?.length
-      ? allTracks.filter((track) => currentUser.favoriteGenres.some((genre) => genre.toLowerCase() === track.genre.toLowerCase()))
-      : []),
-    ...(currentUser?.favoriteArtists?.length
-      ? allTracks.filter((track) => currentUser.favoriteArtists.some((artist) => artist.toLowerCase() === track.artist.toLowerCase()))
-      : []),
-    ...recommendations.trendingForYou,
-  ]).slice(0, 12);
-
-  const baseQuickPlayEntries = dedupeTracks([
-    ...personalizedQuickPlayTracks,
-    ...quickPlayItems.slice(0, 6).map((item) => ({
-      id: item.id,
-      title: item.title,
-      coverUrl: item.coverUrl,
-      artist: 'MR music',
-      album: item.title,
-      artistId: 'a1',
-      albumId: 'al1',
-      duration: 180,
-      playCount: 0,
-      liked: false,
-      genre: 'Featured',
-      year: new Date().getFullYear(),
-    }))
-  ]).slice(0, 12);
-
-  const quickPlayEntries = quickPlayQueue ?? baseQuickPlayEntries;
-
-  useEffect(() => {
-    if (!quickPlayQueue && baseQuickPlayEntries.length > 0) {
-      setQuickPlayQueue([...baseQuickPlayEntries]);
-    }
-  }, [baseQuickPlayEntries, quickPlayQueue]);
-
-  const trendingTracks = dedupeTracks(userTrendingTracks.length > 0 ? userTrendingTracks : recommendations.trendingForYou);
-  const madeForYouTracks = dedupeTracks([
-    ...recommendations.madeForYou,
-    ...personalizedQuickPlayTracks,
-  ]).slice(0, 6);
-  const visibleQuickPlayEntries = quickPlayEntries.slice(0, quickPlayVisibleCount);
-  const remainingQuickPlayCount = Math.max(0, quickPlayEntries.length - quickPlayVisibleCount);
+  const EmptySection = ({ label }: { label: string }) => (
+    <div className="flex flex-col items-center justify-center py-10 gap-3 rounded-2xl border border-white/5 bg-white/[0.02]">
+      <Music2 size={28} className="text-white/20" />
+      <p className="text-xs text-white/40">
+        No tracks in <span className="text-violet-400 font-medium">{label}</span> yet. Upload songs via{' '}
+        <Link to="/admin" className="underline hover:text-white transition-colors">Admin Panel</Link>.
+      </p>
+    </div>
+  );
 
   return (
     <motion.div
@@ -153,23 +115,20 @@ export default function Home() {
           borderColor: isLightMode ? 'rgba(124, 58, 237, 0.18)' : 'rgba(255,255,255,0.08)',
         }}
       >
-        {/* Decorative circles */}
         <div className="absolute top-0 right-0 w-80 h-80 rounded-full opacity-25 filter blur-2xl" style={{ background: 'radial-gradient(circle, #7c3aed, transparent)', transform: 'translate(25%, -25%)' }} />
         <div className="absolute bottom-0 left-0 w-60 h-60 rounded-full opacity-20 filter blur-2xl" style={{ background: 'radial-gradient(circle, #ec4899, transparent)', transform: 'translate(-20%, 20%)' }} />
 
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <p className={cn('text-sm font-medium', isLightMode ? 'text-slate-600' : 'text-white/50')}>
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-
-            {/* Quick Analytics Teaser Badge */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-semibold uppercase tracking-wider text-violet-400 bg-violet-500/10 px-3 py-1 rounded-full border border-violet-500/20">
+              Welcome back
+            </span>
             <Link
               to="/stats"
               className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all shadow',
+                'flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border transition-all',
                 isLightMode
-                  ? 'bg-white/80 hover:bg-white border-violet-200 text-slate-700 hover:text-slate-900'
+                  ? 'bg-slate-900/5 hover:bg-slate-900/10 border-slate-900/10 text-slate-800'
                   : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/80 hover:text-white'
               )}
             >
@@ -192,10 +151,16 @@ export default function Home() {
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => playQueue(recommendations.madeForYou)}
+              onClick={() => {
+                if (allTracks.length > 0) {
+                  playQueue(quickPlayTracks.length > 0 ? quickPlayTracks : allTracks);
+                } else {
+                  navigate('/admin');
+                }
+              }}
               className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-lg shadow-violet-600/30"
             >
-              <Play size={16} fill="white" /> Play Your Mix
+              <Play size={16} fill="white" /> {allTracks.length > 0 ? 'Play Your Mix' : 'Upload Tracks'}
             </motion.button>
             <Link
               to="/stats"
@@ -209,83 +174,87 @@ export default function Home() {
 
       {/* ── Quick Play ────────────────────────────────────────────────────── */}
       <motion.section variants={item}>
-        <SectionHeader title="Quick Play" description="Recently added songs" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {visibleQuickPlayEntries.map((track, idx) => {
-            const isThisPlaying = currentTrack?.id === track.id && isPlaying;
+        <SectionHeader title="Quick Play" description="Recently shuffled tracks from your catalog" />
+        {allTracks.length === 0 ? (
+          <EmptySection label="Quick Play" />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {visibleQuickPlay.map((track, idx) => {
+                const isThisPlaying = currentTrack?.id === track.id && isPlaying;
 
-            const handleCardClick = () => {
-              if (isThisPlaying) {
-                togglePlay();
-              } else {
-                const snapshotQueue = (quickPlayQueue ?? quickPlayEntries).map((entry) => ({ ...entry }));
-                const targetIndex = snapshotQueue.findIndex((item) => item.id === track.id);
-                setQuickPlayQueue(snapshotQueue);
-                playQueue(snapshotQueue, targetIndex >= 0 ? targetIndex : 0);
-              }
-            };
+                const handleCardClick = () => {
+                  if (isThisPlaying) {
+                    togglePlay();
+                  } else {
+                    const targetIndex = quickPlayTracks.findIndex((item) => item.id === track.id);
+                    playQueue(quickPlayTracks, targetIndex >= 0 ? targetIndex : idx);
+                  }
+                };
 
-            return (
-              <motion.button
-                key={`${track.id || track.title}-${idx}`}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleCardClick}
-                className={cn(
-                  "group flex items-center gap-3 border rounded-xl overflow-hidden transition-all text-left",
-                  isThisPlaying
-                    ? "bg-violet-600/20 border-violet-500/40 shadow-lg shadow-violet-600/10"
-                    : "bg-white/5 hover:bg-white/10 border-white/5"
-                )}
-              >
-                <div className="relative w-14 h-14 flex-shrink-0">
-                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
-                  {isThisPlaying && (
-                    <div className="absolute inset-0 bg-violet-950/60 flex items-center justify-center">
-                      <div className="flex items-end gap-0.5 h-3.5">
-                        <span className="w-0.5 h-3.5 bg-violet-300 animate-pulse" />
-                        <span className="w-0.5 h-2 bg-violet-300 animate-pulse delay-75" />
-                        <span className="w-0.5 h-3 bg-violet-300 animate-pulse delay-150" />
-                      </div>
+                return (
+                  <motion.button
+                    key={`${track.id}-${idx}`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleCardClick}
+                    className={cn(
+                      "group flex items-center gap-3 border rounded-xl overflow-hidden transition-all text-left",
+                      isThisPlaying
+                        ? "bg-violet-600/20 border-violet-500/40 shadow-lg shadow-violet-600/10"
+                        : "bg-white/5 hover:bg-white/10 border-white/5"
+                    )}
+                  >
+                    <div className="relative w-14 h-14 flex-shrink-0">
+                      <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                      {isThisPlaying && (
+                        <div className="absolute inset-0 bg-violet-950/60 flex items-center justify-center">
+                          <div className="flex items-end gap-0.5 h-3.5">
+                            <span className="w-0.5 h-3.5 bg-violet-300 animate-pulse" />
+                            <span className="w-0.5 h-2 bg-violet-300 animate-pulse delay-75" />
+                            <span className="w-0.5 h-3 bg-violet-300 animate-pulse delay-150" />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <span className={cn("text-sm font-semibold truncate pr-3 flex-1", isThisPlaying ? "text-violet-300" : "text-white")}>
-                  {track.title}
-                </span>
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCardClick();
-                  }}
-                  className={cn(
-                    "mr-3 w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow",
-                    isThisPlaying
-                      ? "bg-violet-500 opacity-100"
-                      : "bg-violet-600 opacity-0 group-hover:opacity-100"
-                  )}
-                >
-                  {isThisPlaying ? (
-                    <Pause size={12} fill="white" className="text-white" />
-                  ) : (
-                    <Play size={12} fill="white" className="text-white ml-0.5" />
-                  )}
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
+                    <span className={cn("text-sm font-semibold truncate pr-3 flex-1", isThisPlaying ? "text-violet-300" : "text-white")}>
+                      {track.title}
+                    </span>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCardClick();
+                      }}
+                      className={cn(
+                        "mr-3 w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow",
+                        isThisPlaying
+                          ? "bg-violet-500 opacity-100"
+                          : "bg-violet-600 opacity-0 group-hover:opacity-100"
+                      )}
+                    >
+                      {isThisPlaying ? (
+                        <Pause size={12} fill="white" className="text-white" />
+                      ) : (
+                        <Play size={12} fill="white" className="text-white ml-0.5" />
+                      )}
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
 
-        {remainingQuickPlayCount > 0 && (
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setQuickPlayVisibleCount((count) => Math.min(count + 5, quickPlayEntries.length))}
-              className="text-xs font-medium text-violet-300 hover:text-violet-200 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/15 rounded-full px-3 py-1.5 transition-colors"
-            >
-              {remainingQuickPlayCount >= 5 ? 'Show 5 more' : `Show ${remainingQuickPlayCount} more`}
-            </button>
-          </div>
+            {remainingQuickPlayCount > 0 && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setQuickPlayVisibleCount((count) => Math.min(count + 6, quickPlayTracks.length))}
+                  className="text-xs font-medium text-violet-300 hover:text-violet-200 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/15 rounded-full px-3 py-1.5 transition-colors"
+                >
+                  {remainingQuickPlayCount >= 6 ? 'Show 6 more' : `Show ${remainingQuickPlayCount} more`}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </motion.section>
 
@@ -301,16 +270,16 @@ export default function Home() {
               Personalized selection scored using your genre affinity, liked songs, and play counts
             </p>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-white/40 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">
-            <Info size={12} />
-            <span>Deterministic Scoring</span>
+        </div>
+        {madeForYouTracks.length === 0 ? (
+          <EmptySection label="Made For You" />
+        ) : (
+          <div className="glass rounded-2xl border border-white/5 overflow-visible">
+            {madeForYouTracks.map((track, i) => (
+              <MusicCard key={`${track.id}-${i}`} track={track} index={i} showIndex queue={madeForYouTracks} />
+            ))}
           </div>
-        </div>
-        <div className="glass rounded-2xl border border-white/5 overflow-visible">
-          {madeForYouTracks.map((track, i) => (
-            <MusicCard key={`${track.id}-${i}`} track={track} index={i} showIndex queue={madeForYouTracks} />
-          ))}
-        </div>
+        )}
       </motion.section>
 
       {/* ── SECTION 2: New Releases ─────────────────────────────────────────── */}
@@ -326,33 +295,37 @@ export default function Home() {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          {newestReleaseTracks.slice(0, 5).map((track) => (
-            <div
-              key={track.id}
-              onClick={() => playTrack(track)}
-              className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
-            >
-              <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
-                <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg">
-                    <Play size={16} fill="white" className="ml-0.5" />
+        {newReleaseTracks.length === 0 ? (
+          <EmptySection label="New Releases" />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {newReleaseTracks.map((track) => (
+              <div
+                key={track.id}
+                onClick={() => playTrack(track)}
+                className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
+              >
+                <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
+                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg">
+                      <Play size={16} fill="white" className="ml-0.5" />
+                    </div>
                   </div>
                 </div>
+                <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
+                <p className="text-xs text-white/50 truncate mt-0.5">{track.artist}</p>
+                <span className="text-[10px] text-cyan-400 font-medium mt-1 inline-block bg-cyan-500/10 px-2 py-0.5 rounded-full">
+                  {track.genre}
+                </span>
               </div>
-              <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
-              <p className="text-xs text-white/50 truncate mt-0.5">{track.artist}</p>
-              <span className="text-[10px] text-cyan-400 font-medium mt-1 inline-block bg-cyan-500/10 px-2 py-0.5 rounded-full">
-                {track.genre}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </motion.section>
 
       {/* ── SECTION 3: Because You Listened To ─────────────────────────────── */}
-      {recommendations.becauseYouListenedTo && (
+      {becauseYouListenedToTracks.length > 0 && (
         <motion.section variants={item}>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -361,18 +334,17 @@ export default function Home() {
                 <h2 className="text-xl font-bold text-white">
                   Because You Listened To{' '}
                   <span className="text-pink-400 underline decoration-pink-500/30">
-                    "{recommendations.becauseYouListenedTo.seedTrack.title}"
+                    "{becauseYouListenedToTracks[0].title}"
                   </span>
                 </h2>
               </div>
               <p className="text-xs text-white/50 mt-0.5">
-                {recommendations.becauseYouListenedTo.seedReason} by{' '}
-                {recommendations.becauseYouListenedTo.seedTrack.artist}
+                Matched by {becauseYouListenedToTracks[0].genre} and musical style
               </p>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {recommendations.becauseYouListenedTo.tracks.map((track) => (
+            {becauseYouListenedToTracks.map((track) => (
               <div
                 key={track.id}
                 onClick={() => playTrack(track)}
@@ -399,53 +371,61 @@ export default function Home() {
 
       {/* ── SECTION 4: Trending For You ────────────────────────────────────── */}
       <motion.section variants={item}>
-        <SectionHeader title="Trending For You" description="Your most-played songs right now" seeAllHref="/explore" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          {trendingTracks.map((track) => (
-            <div
-              key={track.id}
-              onClick={() => playTrack(track)}
-              className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
-            >
-              <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
-                <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-lg">
-                    <Play size={16} fill="white" className="ml-0.5" />
+        <SectionHeader title="Trending For You" description="Popular tracks in your rotation" seeAllHref="/explore" />
+        {trendingTracks.length === 0 ? (
+          <EmptySection label="Trending For You" />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {trendingTracks.map((track) => (
+              <div
+                key={track.id}
+                onClick={() => playTrack(track)}
+                className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
+              >
+                <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
+                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-lg">
+                      <Play size={16} fill="white" className="ml-0.5" />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
-                  <p className="text-xs text-white/50 truncate mt-0.5">{track.artist}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
+                    <p className="text-xs text-white/50 truncate mt-0.5">{track.artist}</p>
+                  </div>
+                  {playCounts[track.id] ? (
+                    <span className="text-[10px] font-semibold text-violet-300 bg-violet-500/10 px-2 py-1 rounded-full whitespace-nowrap">
+                      {playCounts[track.id]} plays
+                    </span>
+                  ) : null}
                 </div>
-                {playCounts[track.id] ? (
-                  <span className="text-[10px] font-semibold text-violet-300 bg-violet-500/10 px-2 py-1 rounded-full whitespace-nowrap">
-                    {playCounts[track.id]} plays
-                  </span>
-                ) : null}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </motion.section>
 
-      {/* ── SECTION 4: You May Also Like ──────────────────────────────────── */}
+      {/* ── SECTION 5: You May Also Like ──────────────────────────────────── */}
       <motion.section variants={item}>
-        <SectionHeader title="You May Also Like" description="Fresh discoveries outside your standard rotation" />
-        <div className="glass rounded-2xl border border-white/5 overflow-hidden">
-          {recommendations.youMayAlsoLike.slice(0, 5).map((track, i) => (
-            <MusicCard key={track.id} track={track} index={i} showIndex />
-          ))}
-        </div>
+        <SectionHeader title="You May Also Like" description="Fresh discoveries across your genres" />
+        {youMayAlsoLikeTracks.length === 0 ? (
+          <EmptySection label="You May Also Like" />
+        ) : (
+          <div className="glass rounded-2xl border border-white/5 overflow-hidden">
+            {youMayAlsoLikeTracks.map((track, i) => (
+              <MusicCard key={track.id} track={track} index={i} showIndex queue={youMayAlsoLikeTracks} />
+            ))}
+          </div>
+        )}
       </motion.section>
 
-      {/* ── SECTION 5: Recommended Playlists ───────────────────────────────── */}
+      {/* ── SECTION 6: Recommended Playlists ───────────────────────────────── */}
       <motion.section variants={item}>
-        <SectionHeader title="Recommended Playlists" description="Curated collections aligned with your favorite genres" seeAllHref="/playlists" />
+        <SectionHeader title="Recommended Playlists" description="Curated collections for your listening" seeAllHref="/playlists" />
         <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-          {recommendations.recommendedPlaylists.map((pl) => (
+          {playlists.map((pl) => (
             <PlaylistCard key={pl.id} playlist={pl} />
           ))}
         </div>

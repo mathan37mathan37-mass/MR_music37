@@ -8,6 +8,7 @@ import {
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { useSettingsStore, type AudioQuality } from '@/store/settingsStore';
 import { AudioVisualizer, type VisualizerMode } from '@/components/ui/AudioVisualizer';
 import { SleepTimerModal } from '@/components/ui/SleepTimerModal';
 import { ShareModal } from '@/components/ui/ShareModal';
@@ -30,6 +31,23 @@ export function FullscreenPlayer() {
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
+
+  const { audioQuality, setSetting } = useSettingsStore();
+
+  const cycleQuality = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const qualities: AudioQuality[] = ['low', 'normal', 'high', 'lossless'];
+    const nextIdx = (qualities.indexOf(audioQuality) + 1) % qualities.length;
+    const nextQ = qualities[nextIdx];
+    const labels: Record<AudioQuality, string> = {
+      low: 'Low (96 kbps)',
+      normal: 'Normal (160 kbps)',
+      high: 'High (320 kbps)',
+      lossless: 'Lossless (FLAC 24-bit)',
+    };
+    setSetting('audioQuality', nextQ);
+    addToast(`Streaming quality: ${labels[nextQ]}`, 'success');
+  };
 
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const activeLyricRef = useRef<HTMLDivElement | null>(null);
@@ -274,9 +292,27 @@ export function FullscreenPlayer() {
                   <p className="text-base sm:text-lg text-white/70 font-medium mt-1 truncate">
                     {currentTrack.artist}
                   </p>
-                  <p className="text-xs text-white/40 mt-1">
-                    {currentTrack.album} • {currentTrack.genre}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <p className="text-xs text-white/40">
+                      {currentTrack.album} • {currentTrack.genre}
+                    </p>
+                    <button
+                      onClick={cycleQuality}
+                      title={`Streaming Audio Quality: ${audioQuality.toUpperCase()} (Click to cycle)`}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border transition-all cursor-pointer hover:scale-105 active:scale-95",
+                        audioQuality === 'lossless'
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/20"
+                          : audioQuality === 'high'
+                            ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                            : audioQuality === 'normal'
+                              ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                              : "bg-white/10 text-white/60 border-white/20"
+                      )}
+                    >
+                      {audioQuality === 'lossless' ? 'Lossless FLAC' : audioQuality === 'high' ? 'High 320k' : audioQuality === 'normal' ? 'Normal 160k' : 'Low 96k'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Real-time Audio Visualizer Display */}

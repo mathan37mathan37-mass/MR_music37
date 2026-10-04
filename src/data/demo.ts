@@ -44,101 +44,29 @@ export const artists: Artist[] = [
   },
 ];
 
-// ─── SAMPLE LYRICS GENERATOR ───────────────────────────────────────────────
-const sampleLyrics1 = [
-  { time: 0, text: '♪ (Atmospheric Synth Intro) ♪' },
-  { time: 12, text: 'Drifting through the starlit sky' },
-  { time: 24, text: 'Electric waves that rise and sigh' },
-  { time: 38, text: 'Can you hear the signal calling tonight?' },
-  { time: 52, text: 'We are boundless in the velvet light' },
-  { time: 68, text: 'Feel the bassline start to take control' },
-  { time: 82, text: 'A frequency that speaks straight to your soul' },
-  { time: 98, text: 'We keep driving with no destination set' },
-  { time: 114, text: 'Memories we never will forget' },
-  { time: 132, text: '♪ (Dynamic Melodic Break) ♪' },
-  { time: 154, text: 'Catch the current, feel the overflow' },
-  { time: 172, text: 'Shining brighter than the neon glow' },
-  { time: 194, text: '♪ (Fade into infinity) ♪' },
-];
-
-const sampleLyrics2 = [
-  { time: 0, text: '♪ (Retro Synthwave Beats) ♪' },
-  { time: 10, text: 'Chrome reflections on the midnight street' },
-  { time: 22, text: 'Heart racing to the analog beat' },
-  { time: 35, text: 'Past the horizon, shadows fall behind' },
-  { time: 48, text: 'A futuristic realm inside our mind' },
-  { time: 65, text: 'Push the throttle, hear the engine roar' },
-  { time: 80, text: 'We were built for something so much more' },
-  { time: 95, text: 'Speeding through the digital cascade' },
-  { time: 110, text: 'Where the midnight memories never fade' },
-  { time: 128, text: '♪ (Synth Solo) ♪' },
-  { time: 148, text: 'Hold the wheel, let the rhythm guide the flight' },
-  { time: 168, text: 'Living forever in the electric night' },
-];
-
-// ─── SAME-ORIGIN HIGH-FIDELITY AUDIO URLS ──────────────────────────────────────
-// Statically served from /public/audio/ (zero CORS restrictions, zero 403 Forbidden)
-const AUDIO_URLS = [
-  '/audio/track-1.wav',  // Synthwave - 120 BPM
-  '/audio/track-2.wav',  // Electronic - 128 BPM
-  '/audio/track-3.wav',  // R&B - 85 BPM
-  '/audio/track-4.wav',  // Pop - 116 BPM
-  '/audio/track-5.wav',  // Ambient - 72 BPM
-  '/audio/track-6.wav',  // Lo-Fi - 80 BPM
-  '/audio/track-7.wav',  // Dance - 126 BPM
-  '/audio/track-8.wav',  // Hip-Hop - 92 BPM
-  '/audio/track-9.wav',  // Rock - 130 BPM
-  '/audio/track-10.wav', // Indie - 104 BPM
-  '/audio/track-11.wav', // Future Bass - 140 BPM
-  '/audio/track-12.wav', // Chillhop - 78 BPM
-  '/audio/track-13.wav', // Synthpop - 122 BPM
-  '/audio/track-14.wav', // Cyberpunk - 132 BPM
-  '/audio/track-15.wav', // Acoustic - 96 BPM
-  '/audio/track-16.wav', // Funk - 112 BPM
-];
-
-// ─── TRACKS ──────────────────────────────────────────────────────────────────
-export const tracks: Track[] = [
-  { id: 't1', title: 'Celestial Drift', artist: 'Aurora Nights', artistId: 'a1', album: 'Northern Lights', albumId: 'al1', duration: 214, coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=400&q=80', audioUrl: AUDIO_URLS[0], lyrics: sampleLyrics1, playCount: 8200000, liked: true, genre: 'Electronic', year: 2024 },
-  { id: 't2', title: 'Neon Horizon', artist: 'Neon Pulse', artistId: 'a2', album: 'Retrograde', albumId: 'al2', duration: 187, coverUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=400&q=80', audioUrl: AUDIO_URLS[1], lyrics: sampleLyrics2, playCount: 5100000, liked: false, genre: 'Synthwave', year: 2024 },
-  { id: 't3', title: 'Midnight Bloom', artist: 'Luna Vega', artistId: 'a3', album: 'Bloom', albumId: 'al3', duration: 198, coverUrl: 'https://images.unsplash.com/photo-1519112232436-9e8442e69960?w=400&q=80', audioUrl: AUDIO_URLS[2], lyrics: sampleLyrics1, playCount: 12400000, liked: true, genre: 'Indie Pop', year: 2024 },
-  { id: 't4', title: 'Signal Lost', artist: 'The Midnight Code', artistId: 'a4', album: 'Static', albumId: 'al4', duration: 234, coverUrl: 'https://images.unsplash.com/photo-1518972734183-c205f3d6f512?w=400&q=80', audioUrl: AUDIO_URLS[3], lyrics: sampleLyrics2, playCount: 7800000, liked: false, genre: 'Alternative', year: 2023 },
-  { id: 't5', title: 'Velvet Soul', artist: 'Celeste Ray', artistId: 'a5', album: 'Velvet', albumId: 'al5', duration: 222, coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&q=80', audioUrl: AUDIO_URLS[4], lyrics: sampleLyrics1, playCount: 3600000, liked: true, genre: 'R&B', year: 2024 },
-  { id: 't6', title: 'City Rain', artist: 'Cosmo Beat', artistId: 'a6', album: 'Urban Dreams', albumId: 'al6', duration: 195, coverUrl: 'https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?w=400&q=80', audioUrl: AUDIO_URLS[5], lyrics: sampleLyrics2, playCount: 2100000, liked: false, genre: 'Hip-Hop', year: 2024 },
-  { id: 't7', title: 'Electric Storm', artist: 'Isla Storm', artistId: 'a7', album: 'Voltage', albumId: 'al7', duration: 178, coverUrl: 'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=400&q=80', audioUrl: AUDIO_URLS[6], lyrics: sampleLyrics1, playCount: 9700000, liked: true, genre: 'Pop', year: 2024 },
-  { id: 't8', title: 'Ivory Keys', artist: 'Phantom Keys', artistId: 'a8', album: 'Echoes', albumId: 'al8', duration: 256, coverUrl: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=400&q=80', audioUrl: AUDIO_URLS[7], lyrics: sampleLyrics2, playCount: 1400000, liked: false, genre: 'Jazz', year: 2023 },
-  { id: 't9', title: 'Stardust Highway', artist: 'Aurora Nights', artistId: 'a1', album: 'Northern Lights', albumId: 'al1', duration: 208, coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=400&q=80', audioUrl: AUDIO_URLS[8], lyrics: sampleLyrics1, playCount: 6300000, liked: false, genre: 'Electronic', year: 2024 },
-  { id: 't10', title: 'Chasing Neon', artist: 'Neon Pulse', artistId: 'a2', album: 'Retrograde', albumId: 'al2', duration: 201, coverUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=400&q=80', audioUrl: AUDIO_URLS[9], lyrics: sampleLyrics2, playCount: 4500000, liked: true, genre: 'Synthwave', year: 2024 },
-  { id: 't11', title: 'Petals of Light', artist: 'Luna Vega', artistId: 'a3', album: 'Bloom', albumId: 'al3', duration: 193, coverUrl: 'https://images.unsplash.com/photo-1519112232436-9e8442e69960?w=400&q=80', audioUrl: AUDIO_URLS[10], lyrics: sampleLyrics1, playCount: 8900000, liked: false, genre: 'Indie Pop', year: 2024 },
-  { id: 't12', title: 'Fractured Light', artist: 'The Midnight Code', artistId: 'a4', album: 'Static', albumId: 'al4', duration: 219, coverUrl: 'https://images.unsplash.com/photo-1518972734183-c205f3d6f512?w=400&q=80', audioUrl: AUDIO_URLS[11], lyrics: sampleLyrics2, playCount: 5600000, liked: true, genre: 'Alternative', year: 2023 },
-  { id: 't13', title: 'Golden Hour', artist: 'Celeste Ray', artistId: 'a5', album: 'Velvet', albumId: 'al5', duration: 231, coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&q=80', audioUrl: AUDIO_URLS[12], lyrics: sampleLyrics1, playCount: 2800000, liked: false, genre: 'R&B', year: 2024 },
-  { id: 't14', title: 'Midnight Sun', artist: 'Isla Storm', artistId: 'a7', album: 'Voltage', albumId: 'al7', duration: 184, coverUrl: 'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=400&q=80', audioUrl: AUDIO_URLS[13], lyrics: sampleLyrics2, playCount: 7200000, liked: true, genre: 'Pop', year: 2024 },
-  { id: 't15', title: 'Hyperspace', artist: 'Aurora Nights', artistId: 'a1', album: 'Northern Lights', albumId: 'al1', duration: 242, coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=400&q=80', audioUrl: AUDIO_URLS[14], lyrics: sampleLyrics1, playCount: 4100000, liked: false, genre: 'Electronic', year: 2024 },
-  { id: 't16', title: 'Downtown Glow', artist: 'Cosmo Beat', artistId: 'a6', album: 'Urban Dreams', albumId: 'al6', duration: 188, coverUrl: 'https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?w=400&q=80', audioUrl: AUDIO_URLS[15], lyrics: sampleLyrics2, playCount: 1700000, liked: false, genre: 'Hip-Hop', year: 2024 },
-];
+// ─── TRACKS — Empty by default. Songs come from the Admin/Supabase catalog. ──
+export const tracks: Track[] = [];
 
 // ─── ALBUMS ──────────────────────────────────────────────────────────────────
 export const albums: Album[] = [
-  { id: 'al1', title: 'Northern Lights', artist: 'Aurora Nights', artistId: 'a1', coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=400&q=80', year: 2024, genre: 'Electronic', trackCount: 12, tracks: tracks.filter(t => t.albumId === 'al1') },
-  { id: 'al2', title: 'Retrograde', artist: 'Neon Pulse', artistId: 'a2', coverUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=400&q=80', year: 2024, genre: 'Synthwave', trackCount: 10, tracks: tracks.filter(t => t.albumId === 'al2') },
-  { id: 'al3', title: 'Bloom', artist: 'Luna Vega', artistId: 'a3', coverUrl: 'https://images.unsplash.com/photo-1519112232436-9e8442e69960?w=400&q=80', year: 2024, genre: 'Indie Pop', trackCount: 14, tracks: tracks.filter(t => t.albumId === 'al3') },
-  { id: 'al4', title: 'Static', artist: 'The Midnight Code', artistId: 'a4', coverUrl: 'https://images.unsplash.com/photo-1518972734183-c205f3d6f512?w=400&q=80', year: 2023, genre: 'Alternative', trackCount: 11, tracks: tracks.filter(t => t.albumId === 'al4') },
-  { id: 'al5', title: 'Velvet', artist: 'Celeste Ray', artistId: 'a5', coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&q=80', year: 2024, genre: 'R&B', trackCount: 9, tracks: tracks.filter(t => t.albumId === 'al5') },
-  { id: 'al6', title: 'Urban Dreams', artist: 'Cosmo Beat', artistId: 'a6', coverUrl: 'https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?w=400&q=80', year: 2024, genre: 'Hip-Hop', trackCount: 13, tracks: tracks.filter(t => t.albumId === 'al6') },
-  { id: 'al7', title: 'Voltage', artist: 'Isla Storm', artistId: 'a7', coverUrl: 'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=400&q=80', year: 2024, genre: 'Pop', trackCount: 11, tracks: tracks.filter(t => t.albumId === 'al7') },
-  { id: 'al8', title: 'Echoes', artist: 'Phantom Keys', artistId: 'a8', coverUrl: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=400&q=80', year: 2023, genre: 'Jazz', trackCount: 8, tracks: tracks.filter(t => t.albumId === 'al8') },
+  { id: 'al1', title: 'Northern Lights', artist: 'Aurora Nights', artistId: 'a1', coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=400&q=80', year: 2024, genre: 'Electronic', trackCount: 0, tracks: [] },
+  { id: 'al2', title: 'Retrograde', artist: 'Neon Pulse', artistId: 'a2', coverUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=400&q=80', year: 2024, genre: 'Synthwave', trackCount: 0, tracks: [] },
+  { id: 'al3', title: 'Bloom', artist: 'Luna Vega', artistId: 'a3', coverUrl: 'https://images.unsplash.com/photo-1519112232436-9e8442e69960?w=400&q=80', year: 2024, genre: 'Indie Pop', trackCount: 0, tracks: [] },
+  { id: 'al4', title: 'Static', artist: 'The Midnight Code', artistId: 'a4', coverUrl: 'https://images.unsplash.com/photo-1518972734183-c205f3d6f512?w=400&q=80', year: 2023, genre: 'Alternative', trackCount: 0, tracks: [] },
+  { id: 'al5', title: 'Velvet', artist: 'Celeste Ray', artistId: 'a5', coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&q=80', year: 2024, genre: 'R&B', trackCount: 0, tracks: [] },
+  { id: 'al6', title: 'Urban Dreams', artist: 'Cosmo Beat', artistId: 'a6', coverUrl: 'https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?w=400&q=80', year: 2024, genre: 'Hip-Hop', trackCount: 0, tracks: [] },
+  { id: 'al7', title: 'Voltage', artist: 'Isla Storm', artistId: 'a7', coverUrl: 'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=400&q=80', year: 2024, genre: 'Pop', trackCount: 0, tracks: [] },
+  { id: 'al8', title: 'Echoes', artist: 'Phantom Keys', artistId: 'a8', coverUrl: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=400&q=80', year: 2023, genre: 'Jazz', trackCount: 0, tracks: [] },
 ];
 
 // ─── PLAYLISTS ────────────────────────────────────────────────────────────────
 export const playlists: Playlist[] = [
-  { id: 'pl1', title: 'Late Night Drives', description: 'Perfect tracks for driving through the city at night', coverColors: ['#1a1a3e', '#7c3aed'], tracks: [tracks[0], tracks[1], tracks[6], tracks[9], tracks[13]], createdBy: 'MR music', isPublic: true, followers: 234000 },
-  { id: 'pl2', title: 'Morning Ritual', description: 'Start your day with positive energy', coverColors: ['#1a3a1a', '#22c55e'], tracks: [tracks[2], tracks[4], tracks[10]], createdBy: 'MR music', isPublic: true, followers: 189000 },
-  { id: 'pl3', title: 'Focus Mode', description: 'Deep concentration tracks for work & study', coverColors: ['#1a1a2e', '#3b82f6'], tracks: [tracks[7], tracks[0], tracks[14]], createdBy: 'MR music', isPublic: true, followers: 412000 },
-  { id: 'pl4', title: 'Workout Beast', description: 'High energy tracks to crush your workout', coverColors: ['#3a1a1a', '#ef4444'], tracks: [tracks[6], tracks[3], tracks[11], tracks[5]], createdBy: 'MR music', isPublic: true, followers: 567000 },
-  { id: 'pl5', title: 'Chill Vibes', description: 'Relax and unwind with smooth sounds', coverColors: ['#1a2a3a', '#06b6d4'], tracks: [tracks[4], tracks[7], tracks[12]], createdBy: 'MR music', isPublic: true, followers: 321000 },
-  { id: 'pl6', title: 'Synthwave Dreams', description: 'Retro-futuristic vibes all day long', coverColors: ['#2a1a3e', '#ec4899'], tracks: [tracks[1], tracks[9], tracks[14]], createdBy: 'MR music', isPublic: true, followers: 178000 },
-  { id: 'pl7', title: 'Indie Discovery', description: 'The best new indie artists right now', coverColors: ['#2a2a1a', '#f59e0b'], tracks: [tracks[2], tracks[10], tracks[4]], createdBy: 'You', isPublic: false, followers: 0 },
-  { id: 'pl8', title: 'R&B Sunday', description: 'Soulful R&B for a relaxed Sunday', coverColors: ['#3a1a2a', '#a855f7'], tracks: [tracks[4], tracks[12]], createdBy: 'You', isPublic: false, followers: 0 },
+  { id: 'pl1', title: 'Late Night Drives', description: 'Perfect tracks for driving through the city at night', coverColors: ['#1a1a3e', '#7c3aed'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 234000 },
+  { id: 'pl2', title: 'Morning Ritual', description: 'Start your day with positive energy', coverColors: ['#1a3a1a', '#22c55e'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 189000 },
+  { id: 'pl3', title: 'Focus Mode', description: 'Deep concentration tracks for work & study', coverColors: ['#1a1a2e', '#3b82f6'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 412000 },
+  { id: 'pl4', title: 'Workout Beast', description: 'High energy tracks to crush your workout', coverColors: ['#3a1a1a', '#ef4444'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 567000 },
+  { id: 'pl5', title: 'Chill Vibes', description: 'Relax and unwind with smooth sounds', coverColors: ['#1a2a3a', '#06b6d4'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 321000 },
+  { id: 'pl6', title: 'Synthwave Dreams', description: 'Retro-futuristic vibes all day long', coverColors: ['#2a1a3e', '#ec4899'], tracks: [], createdBy: 'MR music', isPublic: true, followers: 178000 },
 ];
 
 // ─── GENRES ──────────────────────────────────────────────────────────────────
@@ -163,12 +91,5 @@ export const moodPlaylists: MoodPlaylist[] = [
   { id: 'm6', mood: 'Focused', title: 'Deep Work', gradient: ['#7c3aed', '#3b82f6'], emoji: '🧠', trackCount: 47 },
 ];
 
-// ─── QUICK PLAY ───────────────────────────────────────────────────────────────
-export const quickPlayItems = [
-  { id: 'qp1', title: 'Late Night Drives', coverUrl: 'https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=300&q=80', type: 'playlist' },
-  { id: 'qp2', title: 'Northern Lights', coverUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=300&q=80', type: 'album' },
-  { id: 'qp3', title: 'Morning Ritual', coverUrl: 'https://images.unsplash.com/photo-1519112232436-9e8442e69960?w=300&q=80', type: 'playlist' },
-  { id: 'qp4', title: 'Focus Mode', coverUrl: 'https://images.unsplash.com/photo-1518972734183-c205f3d6f512?w=300&q=80', type: 'playlist' },
-  { id: 'qp5', title: 'Bloom', coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=300&q=80', type: 'album' },
-  { id: 'qp6', title: 'Workout Beast', coverUrl: 'https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?w=300&q=80', type: 'playlist' },
-];
+// ─── QUICK PLAY (kept for structure, populated dynamically from admin catalog) ─
+export const quickPlayItems: { id: string; title: string; coverUrl: string; type: string }[] = [];

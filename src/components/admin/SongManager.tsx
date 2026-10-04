@@ -14,7 +14,8 @@ import { FileUploadZone } from './FileUploadZone';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Track } from '@/types';
 import type { SongFormData } from '@/types/admin';
-import { validateAudioFile, validateImageFile, uploadMediaWithProgress } from '@/services/storageService';
+import { validateAudioFile, validateImageFile } from '@/services/storageService';
+import { uploadSongAudio, uploadSongCover } from '@/services/supabaseStorageService';
 import { formatDuration, cn } from '@/utils/cn';
 
 const GENRES = [
@@ -42,6 +43,7 @@ interface BulkUploadItem {
   progress: number;
   error?: string;
   duplicate: boolean;
+  duplicateSongId?: string;
   duplicateAction?: 'skip' | 'replace' | 'new';
   selected: boolean;
 }
@@ -52,7 +54,7 @@ interface SongManagerProps {
 }
 
 export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManagerProps) {
-  const { songs, artists, albums, addSong, updateSong, deleteSong } = useAdminStore();
+  const { songs, artists, albums, addSong, updateSong, deleteSong, deleteMultipleSongs } = useAdminStore();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore();
   const { addToast } = useUIStore();
 
@@ -67,6 +69,8 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
   const [bulkFiles, setBulkFiles] = useState<BulkUploadItem[]>([]);
   const [bulkConcurrency, setBulkConcurrency] = useState(3);
   const [bulkIsUploading, setBulkIsUploading] = useState(false);
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const bulkAudioInputRef = useRef<HTMLInputElement>(null);
   const bulkCoverInputRef = useRef<HTMLInputElement>(null);
@@ -114,18 +118,22 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
     setBulkFiles((prev) => {
       const seenKeys = new Set(prev.map((item) => `${item.file.name}:${item.file.size}`));
+      const currentCatalog = useAdminStore.getState().songs;
       const mapped: BulkUploadItem[] = validAudioFiles
         .filter((file) => !seenKeys.has(`${file.name}:${file.size}`))
         .map((file) => {
           const baseTitle = getTrackTitleFromFilename(file.name);
-          const duplicate = songs.some((song) => {
-            const titleMatch = song.title.toLowerCase() === baseTitle.toLowerCase();
+          const filenameWithoutExt = file.name.toLowerCase().replace(/\.[^/.]+$/, '').trim();
+          const matchedSong = currentCatalog.find((song) => {
+            const titleMatch = song.title.trim().toLowerCase() === baseTitle.trim().toLowerCase();
+            const fileMatch = song.title.trim().toLowerCase() === filenameWithoutExt;
             const audioHint = !!song.audioUrl && (
               song.audioUrl.toLowerCase().includes(baseTitle.toLowerCase()) ||
-              song.audioUrl.toLowerCase().includes(file.name.toLowerCase().replace(/\.[^/.]+$/, ''))
+              song.audioUrl.toLowerCase().includes(filenameWithoutExt)
             );
-            return titleMatch || audioHint;
+            return titleMatch || fileMatch || audioHint;
           });
+          const duplicate = Boolean(matchedSong);
 
           return {
             id: `bulk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`,
@@ -141,7 +149,8 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
             status: 'waiting' as const,
             progress: 0,
             duplicate,
-            duplicateAction: 'new' as const,
+            duplicateSongId: matchedSong?.id,
+            duplicateAction: duplicate ? ('skip' as const) : ('new' as const),
             selected: true,
           };
         });
@@ -282,8 +291,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
         try {
           const songId = `song_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const storagePath = `music/songs/${songId}`;
-          const url = await uploadMediaWithProgress(storagePath, current.file, {
+          const url = await uploadSongAudio(songId, current.file, {
             onProgress: (progress) => {
               setBulkFiles((prev) => prev.map((row) => row.id === current.id ? {
                 ...row,
@@ -304,14 +312,22 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
           setBulkFiles((prev) => prev.map((row) => row.id === current.id ? { ...row, status: 'processing', progress: 95 } : row));
 
+          const currentCatalog = useAdminStore.getState().songs;
           const selectedArtist = artists.find((artist) => artist.id === current.artistId) || artists[0];
           const selectedAlbum = albums.find((album) => album.id === current.albumId) || albums[0];
           const titleValue = current.title.trim() || getTrackTitleFromFilename(current.file.name);
+          const filenameWithoutExt = current.file.name.toLowerCase().replace(/\.[^/.]+$/, '').trim();
 
-          const existingSong = current.duplicate && current.duplicateAction === 'replace'
-            ? songs.find((song) => song.title.toLowerCase() === titleValue.toLowerCase() ||
-              (!!song.audioUrl && (song.audioUrl.toLowerCase().includes(titleValue.toLowerCase()) ||
-                song.audioUrl.toLowerCase().includes(current.file.name.toLowerCase().replace(/\.[^/.]+$/, '')))))
+          const existingSong = current.duplicateAction === 'replace'
+            ? currentCatalog.find((song) => song.id === current.duplicateSongId) ||
+              currentCatalog.find((song) =>
+                song.title.trim().toLowerCase() === titleValue.toLowerCase() ||
+                song.title.trim().toLowerCase() === filenameWithoutExt ||
+                (!!song.audioUrl && (
+                  song.audioUrl.toLowerCase().includes(titleValue.toLowerCase()) ||
+                  song.audioUrl.toLowerCase().includes(filenameWithoutExt)
+                ))
+              )
             : null;
 
           const duration = await getAudioDuration(current.file, current.duration || 180);
@@ -329,12 +345,12 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
               year: current.year || existingSong.year,
               coverUrl: current.coverUrl || existingSong.coverUrl || DEFAULT_COVER,
               audioUrl: url,
-              lyrics: current.lyrics || existingSong.lyrics || [],
+              lyrics: current.lyrics?.length ? current.lyrics : (existingSong.lyrics || []),
             } as any;
 
             updateSong(existingSong.id, updatedSong);
             setBulkFiles((prev) => prev.map((row) => row.id === current.id ? { ...row, status: 'completed', progress: 100, error: undefined } : row));
-            addToast(`${titleValue} replaced the duplicate record.`, 'success');
+            addToast(`Successfully replaced "${existingSong.title}" with updated audio.`, 'success');
             continue;
           }
 
@@ -350,7 +366,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
             lyrics: current.lyrics || [],
           });
 
-          const adminId = useAuthStore.getState().user?.uid || useAuthStore.getState().firebaseUser?.uid || 'admin-user';
+          const adminId = useAuthStore.getState().user?.uid || 'admin-user';
           updateSong(created.id, {
             uploadedBy: adminId,
             createdAt: Date.now(),
@@ -429,11 +445,31 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
         </div>
       </div>
 
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {/* Bulk delete bar */}
+        {selectedSongIds.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/20">
+            <span className="text-xs text-rose-300 font-semibold">{selectedSongIds.size} song{selectedSongIds.size !== 1 ? 's' : ''} selected</span>
+            <button
+              type="button"
+              onClick={() => setBulkDeleteOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold transition-colors"
+            >
+              <Trash2 size={12} /> Delete Selected
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedSongIds(new Set())}
+              className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setBulkModalOpen(true)}
-          className="flex items-center gap-2 rounded-2xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 px-4 py-2 text-xs font-semibold text-violet-200 transition-colors"
+          className="ml-auto flex items-center gap-2 rounded-2xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 px-4 py-2 text-xs font-semibold text-violet-200 transition-colors"
         >
           <UploadCloud size={14} /> Upload Multiple Songs
         </button>
@@ -444,6 +480,21 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/5 text-[11px] font-semibold text-white/40 uppercase tracking-wider bg-white/[0.01]">
+                <th className="py-3.5 px-4 w-10">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-white/20 bg-transparent accent-violet-500 cursor-pointer"
+                    checked={filteredSongs.length > 0 && filteredSongs.every((s) => selectedSongIds.has(s.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSongIds(new Set(filteredSongs.map((s) => s.id)));
+                      } else {
+                        setSelectedSongIds(new Set());
+                      }
+                    }}
+                    title="Select all"
+                  />
+                </th>
                 <th className="py-3.5 px-4">#</th>
                 <th className="py-3.5 px-4">Track</th>
                 <th className="py-3.5 px-4">Artist</th>
@@ -458,9 +509,25 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
               {filteredSongs.map((song, idx) => {
                 const isCurrent = currentTrack?.id === song.id;
                 const isPlayingThis = isCurrent && isPlaying;
+                const isSelected = selectedSongIds.has(song.id);
 
                 return (
-                  <tr key={song.id} className="hover:bg-white/[0.03] transition-colors group">
+                  <tr key={song.id} className={cn('hover:bg-white/[0.03] transition-colors group', isSelected && 'bg-violet-500/5')}>
+                    <td className="py-3 px-4">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-white/20 bg-transparent accent-violet-500 cursor-pointer"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedSongIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(song.id)) next.delete(song.id);
+                            else next.add(song.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </td>
                     <td className="py-3 px-4 text-white/30 tabular-nums">{idx + 1}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -575,11 +642,13 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                 </div>
 
                 <div className="space-y-3 pt-3 border-t border-white/5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-white/40">Audio & Artwork Assets (Firebase Storage)</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-white/40">Audio & Artwork Assets (Supabase Storage)</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FileUploadZone
                       type="audio"
-                      storagePath="songs/audio"
+                      storagePath="songs"
+                      storageBackend="supabase"
+                      supabaseBucket="songs"
                       currentUrl={formData.audioUrl}
                       onUploadSuccess={(url) => {
                         setFormData((prev) => ({ ...prev, audioUrl: url }));
@@ -601,7 +670,9 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
                     <FileUploadZone
                       type="image"
-                      storagePath="songs/artwork"
+                      storagePath="songs"
+                      storageBackend="supabase"
+                      supabaseBucket="covers"
                       currentUrl={formData.coverUrl}
                       onUploadSuccess={(url) => {
                         setFormData((prev) => ({ ...prev, coverUrl: url }));
@@ -711,17 +782,55 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                                   {item.status === 'uploading' && 'Uploading'}
                                   {item.status === 'processing' && 'Processing'}
                                   {item.status === 'failed' && 'Failed'}
-                                  {item.status === 'waiting' && (item.duplicate ? 'Already exists' : 'Waiting')}
+                                  {item.status === 'waiting' && (
+                                    item.duplicateAction === 'skip'
+                                      ? 'Skipped'
+                                      : item.duplicateAction === 'replace'
+                                      ? 'Will Replace'
+                                      : item.duplicate
+                                      ? 'Duplicate'
+                                      : 'Waiting'
+                                  )}
                                 </span>
                                 <button type="button" onClick={() => setBulkFiles((prev) => prev.filter((row) => row.id !== item.id))} className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10">Remove</button>
                               </div>
                             </div>
 
                             {item.duplicate && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicateAction: 'skip' } : row))} className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10">Skip</button>
-                                <button type="button" onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicateAction: 'replace', duplicate: true } : row))} className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200 hover:bg-amber-500/20">Replace</button>
-                                <button type="button" onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicate: false, duplicateAction: 'new' } : row))} className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-2 py-1 text-[10px] text-violet-200 hover:bg-violet-500/20">Upload as new</button>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicateAction: row.duplicateAction === 'skip' ? 'new' : 'skip' } : row))}
+                                  className={cn('rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                                    item.duplicateAction === 'skip'
+                                      ? 'border-amber-400/50 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 ring-1 ring-amber-400/30'
+                                      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                                  )}
+                                >
+                                  {item.duplicateAction === 'skip' ? '⏭ Skipped (click to unskip)' : 'Skip'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicateAction: row.duplicateAction === 'replace' ? 'new' : 'replace' } : row))}
+                                  className={cn('rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                                    item.duplicateAction === 'replace'
+                                      ? 'border-cyan-400/60 bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40 hover:bg-cyan-500/35'
+                                      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                                  )}
+                                >
+                                  {item.duplicateAction === 'replace' ? '✓ Replace (selected)' : 'Replace Existing'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setBulkFiles((prev) => prev.map((row) => row.id === item.id ? { ...row, duplicate: false, duplicateAction: 'new' } : row))}
+                                  className={cn('rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                                    item.duplicateAction === 'new' && !item.duplicate
+                                      ? 'border-violet-400/50 bg-violet-500/25 text-violet-200'
+                                      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                                  )}
+                                >
+                                  Upload as new
+                                </button>
                               </div>
                             )}
 
@@ -820,7 +929,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                             e.target.value = '';
                             return;
                           }
-                          const url = await uploadMediaWithProgress('music/covers/bulk', file, { onProgress: () => undefined });
+                          const url = await uploadSongCover(`bulk_${Date.now()}`, file, { onProgress: () => undefined });
                           setBulkFiles((prev) => prev.map((row) => row.selected ? { ...row, coverUrl: url } : row));
                           addToast('Cover applied to the selected songs.', 'success');
                           e.target.value = '';
@@ -873,6 +982,21 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
           }
         }}
         onClose={() => setDeletingSong(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={bulkDeleteOpen}
+        title={`Delete ${selectedSongIds.size} Song${selectedSongIds.size !== 1 ? 's' : ''}`}
+        description={`This will permanently remove ${selectedSongIds.size} song${selectedSongIds.size !== 1 ? 's' : ''} from the catalog. This action cannot be undone.`}
+        confirmLabel={`Delete ${selectedSongIds.size} Song${selectedSongIds.size !== 1 ? 's' : ''}`}
+        onConfirm={() => {
+          const ids = Array.from(selectedSongIds);
+          deleteMultipleSongs(ids);
+          addToast(`Deleted ${ids.length} song${ids.length !== 1 ? 's' : ''} from catalog.`, 'success');
+          setSelectedSongIds(new Set());
+          setBulkDeleteOpen(false);
+        }}
+        onClose={() => setBulkDeleteOpen(false)}
       />
     </div>
   );

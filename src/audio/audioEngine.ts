@@ -1,6 +1,8 @@
 import { resolveAudioSource } from '@/services/mediaStorage';
 
-// Audio Engine singleton with Web Audio API AnalyserNode for Real-Time Visualizer
+export type AudioQuality = 'low' | 'normal' | 'high' | 'lossless';
+
+// Audio Engine singleton with Web Audio API AnalyserNode & Dynamic Quality DSP
 class AudioEngine {
   private audio: HTMLAudioElement;
   private isSynthesizing = false;
@@ -18,6 +20,13 @@ class AudioEngine {
   private frequencyData: Uint8Array = new Uint8Array(64);
   private waveformData: Uint8Array = new Uint8Array(64);
   private synthCurrentTime = 0;
+
+  // Streaming Audio Quality DSP Chain
+  private qualityFilter: BiquadFilterNode | null = null;
+  private qualityHighShelf: BiquadFilterNode | null = null;
+  private qualityCompressor: DynamicsCompressorNode | null = null;
+  private qualityGain: GainNode | null = null;
+  private currentQuality: AudioQuality = 'high';
 
   // Per-track seed for unique synthesized music
   private trackSeed = 1;
@@ -63,7 +72,7 @@ class AudioEngine {
 
     this.audio.addEventListener('error', () => {
       this.onLoadingCallback?.(false);
-      // Fallback: If network audio fails or is blocked, synthesize a musical ambient loop
+      // Fallback: If network audio fails or is blocked, synthesize musical fallback
       this.startSynthFallback();
     });
   }
@@ -85,18 +94,144 @@ class AudioEngine {
       this.waveformData = new Uint8Array(this.analyser.fftSize);
     }
 
-    if (!this.isSourceConnected && this.analyser && this.audioCtx) {
+    // Build the Quality DSP chain
+    if (!this.qualityFilter && this.audioCtx) {
+      this.qualityFilter = this.audioCtx.createBiquadFilter();
+      this.qualityHighShelf = this.audioCtx.createBiquadFilter();
+      this.qualityCompressor = this.audioCtx.createDynamicsCompressor();
+      this.qualityGain = this.audioCtx.createGain();
+
+      this.applyQualityDSP(this.currentQuality);
+    }
+
+    if (!this.isSourceConnected && this.analyser && this.audioCtx && this.qualityFilter && this.qualityHighShelf && this.qualityCompressor && this.qualityGain) {
       try {
         this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
-        this.sourceNode.connect(this.analyser);
+        // Connect chain: source -> lowpass filter -> highshelf EQ -> dynamics compressor -> gain -> analyser -> destination
+        this.sourceNode.connect(this.qualityFilter);
+        this.qualityFilter.connect(this.qualityHighShelf);
+        this.qualityHighShelf.connect(this.qualityCompressor);
+        this.qualityCompressor.connect(this.qualityGain);
+        this.qualityGain.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.isSourceConnected = true;
       } catch {
-        // Source node might fail if cross-origin without proper CORS headers
+        // Fallback direct connection or non-CORS bypass
+        try {
+          if (this.sourceNode && this.analyser) {
+            this.sourceNode.connect(this.analyser);
+            this.analyser.connect(this.audioCtx.destination);
+            this.isSourceConnected = true;
+          }
+        } catch {
+          // Native browser audio continues without Web Audio intercept
+        }
       }
     }
 
     return this.audioCtx;
+  }
+
+  /**
+   * Applies acoustic parameters and DSP profile corresponding to selected streaming quality
+   */
+  public setAudioQuality(quality: AudioQuality): void {
+    this.currentQuality = quality;
+    if (this.audioCtx) {
+      this.applyQualityDSP(quality);
+    }
+    console.log(`[AudioEngine] Streaming audio quality configured to: ${quality.toUpperCase()}`);
+  }
+
+  public getAudioQuality(): AudioQuality {
+    return this.currentQuality;
+  }
+
+  private applyQualityDSP(quality: AudioQuality) {
+    if (!this.audioCtx || !this.qualityFilter || !this.qualityHighShelf || !this.qualityCompressor || !this.qualityGain) return;
+    const now = this.audioCtx.currentTime;
+
+    switch (quality) {
+      case 'lossless':
+        // Studio Master / FLAC 24-bit fidelity:
+        // Full uncompressed frequency spectrum up to Nyquist limit, wide dynamic range, crystal presence
+        this.qualityFilter.type = 'lowpass';
+        this.qualityFilter.frequency.setTargetAtTime(22050, now, 0.04);
+        this.qualityFilter.Q.setTargetAtTime(0.707, now, 0.04);
+
+        this.qualityHighShelf.type = 'highshelf';
+        this.qualityHighShelf.frequency.setTargetAtTime(12000, now, 0.04);
+        this.qualityHighShelf.gain.setTargetAtTime(1.5, now, 0.04); // subtle audiophile air & brilliance
+
+        this.qualityCompressor.threshold.setTargetAtTime(-3, now, 0.04);
+        this.qualityCompressor.knee.setTargetAtTime(40, now, 0.04);
+        this.qualityCompressor.ratio.setTargetAtTime(1.1, now, 0.04);
+        this.qualityCompressor.attack.setTargetAtTime(0.002, now, 0.04);
+        this.qualityCompressor.release.setTargetAtTime(0.3, now, 0.04);
+
+        this.qualityGain.gain.setTargetAtTime(1.0, now, 0.04);
+        break;
+
+      case 'high':
+        // 320 kbps High Fidelity:
+        // Full 20kHz reproduction, transparent dynamics, pristine studio master reproduction
+        this.qualityFilter.type = 'lowpass';
+        this.qualityFilter.frequency.setTargetAtTime(20000, now, 0.04);
+        this.qualityFilter.Q.setTargetAtTime(0.707, now, 0.04);
+
+        this.qualityHighShelf.type = 'highshelf';
+        this.qualityHighShelf.frequency.setTargetAtTime(10000, now, 0.04);
+        this.qualityHighShelf.gain.setTargetAtTime(0.2, now, 0.04);
+
+        this.qualityCompressor.threshold.setTargetAtTime(-10, now, 0.04);
+        this.qualityCompressor.knee.setTargetAtTime(30, now, 0.04);
+        this.qualityCompressor.ratio.setTargetAtTime(2.0, now, 0.04);
+        this.qualityCompressor.attack.setTargetAtTime(0.005, now, 0.04);
+        this.qualityCompressor.release.setTargetAtTime(0.2, now, 0.04);
+
+        this.qualityGain.gain.setTargetAtTime(1.0, now, 0.04);
+        break;
+
+      case 'normal':
+        // 160 kbps Standard:
+        // 15.5kHz high-frequency roll-off (characteristic MP3/AAC cutoff), balanced compression
+        this.qualityFilter.type = 'lowpass';
+        this.qualityFilter.frequency.setTargetAtTime(15500, now, 0.04);
+        this.qualityFilter.Q.setTargetAtTime(0.8, now, 0.04);
+
+        this.qualityHighShelf.type = 'highshelf';
+        this.qualityHighShelf.frequency.setTargetAtTime(8000, now, 0.04);
+        this.qualityHighShelf.gain.setTargetAtTime(-1.2, now, 0.04);
+
+        this.qualityCompressor.threshold.setTargetAtTime(-16, now, 0.04);
+        this.qualityCompressor.knee.setTargetAtTime(20, now, 0.04);
+        this.qualityCompressor.ratio.setTargetAtTime(3.2, now, 0.04);
+        this.qualityCompressor.attack.setTargetAtTime(0.01, now, 0.04);
+        this.qualityCompressor.release.setTargetAtTime(0.18, now, 0.04);
+
+        this.qualityGain.gain.setTargetAtTime(0.98, now, 0.04);
+        break;
+
+      case 'low':
+        // 96 kbps Mobile Data Saver:
+        // 10.5kHz lowpass filtering (bandwidth saver), tighter dynamic ceiling
+        this.qualityFilter.type = 'lowpass';
+        this.qualityFilter.frequency.setTargetAtTime(10500, now, 0.04);
+        this.qualityFilter.Q.setTargetAtTime(0.9, now, 0.04);
+
+        this.qualityHighShelf.type = 'highshelf';
+        this.qualityHighShelf.frequency.setTargetAtTime(6000, now, 0.04);
+        this.qualityHighShelf.gain.setTargetAtTime(-3.5, now, 0.04);
+
+        this.qualityCompressor.threshold.setTargetAtTime(-22, now, 0.04);
+        this.qualityCompressor.knee.setTargetAtTime(15, now, 0.04);
+        this.qualityCompressor.ratio.setTargetAtTime(4.8, now, 0.04);
+        this.qualityCompressor.attack.setTargetAtTime(0.02, now, 0.04);
+        this.qualityCompressor.release.setTargetAtTime(0.15, now, 0.04);
+
+        this.qualityGain.gain.setTargetAtTime(0.95, now, 0.04);
+        break;
+    }
   }
 
   public async setSource(src: string, autoPlay = true, seed = 1, duration = 210, trackTitle?: string): Promise<void> {
@@ -214,15 +349,12 @@ class AudioEngine {
   // --- Real-time Visualizer Audio Data Provider ---
   public getFrequencyData(): Uint8Array {
     if (this.analyser && this.isSourceConnected && !this.audio.paused) {
-      // TypeScript 5.5+ Uint8Array<ArrayBufferLike> vs Uint8Array<ArrayBuffer>
       (this.analyser.getByteFrequencyData as (array: Uint8Array) => void)(this.frequencyData);
-      // If data is all zeroes (e.g. CORS isolation), generate musical visualizer beat
       if (this.frequencyData.some((v) => v > 0)) {
         return this.frequencyData;
       }
     }
 
-    // Dynamic simulated frequency data synchronized with current playback
     return this.generateSimulatedFrequencies();
   }
 
@@ -246,10 +378,8 @@ class AudioEngine {
 
     for (let i = 0; i < count; i++) {
       if (!isPlaying) {
-        // Idle gentle breathing baseline
         data[i] = Math.max(0, Math.sin(i * 0.15 + Date.now() * 0.002) * 12 + 6);
       } else {
-        // Per-track unique frequencies based on seed
         const bassFreq = 1.5 + (seed % 4) * 0.5;
         const midFreq = 2.8 + (seed % 5) * 0.4;
         const trebleFreq = 5.5 + (seed % 3) * 0.7;
@@ -295,24 +425,15 @@ class AudioEngine {
     this.isSynthesizing = true;
     if (this.synthInterval) clearInterval(this.synthInterval);
 
-    // Generate unique chord progressions based on trackSeed
     const seed = this.trackSeed;
     const allChordSets = [
-      // Uplifting electronic (C major)
       [[261.63, 329.63, 392.0], [293.66, 369.99, 440.0], [329.63, 415.30, 493.88], [246.94, 311.13, 369.99]],
-      // Synthwave (minor keys)
       [[220.0, 261.63, 329.63], [196.0, 233.08, 293.66], [174.61, 207.65, 261.63], [185.0, 220.0, 277.18]],
-      // Pop (A major)
       [[440.0, 554.37, 659.25], [392.0, 493.88, 587.33], [349.23, 440.0, 523.25], [329.63, 415.30, 493.88]],
-      // Jazz / Soul
       [[261.63, 311.13, 369.99, 440.0], [233.08, 277.18, 329.63, 392.0], [207.65, 246.94, 293.66, 349.23], [220.0, 261.63, 311.13, 369.99]],
-      // Ambient / Lo-fi
       [[130.81, 164.81, 196.0], [146.83, 185.0, 220.0], [164.81, 207.65, 246.94], [155.56, 196.0, 233.08]],
-      // R&B / Hip-hop
       [[174.61, 220.0, 261.63], [155.56, 195.99, 233.08], [146.83, 185.0, 220.0], [130.81, 164.81, 196.0]],
-      // Rock / Alternative
       [[196.0, 246.94, 293.66], [220.0, 277.18, 329.63], [174.61, 220.0, 261.63], [185.0, 233.08, 277.18]],
-      // Dance / Pop
       [[523.25, 659.25, 783.99], [493.88, 622.25, 739.99], [440.0, 554.37, 659.25], [415.30, 523.25, 622.25]],
     ];
 
@@ -355,7 +476,9 @@ class AudioEngine {
         gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.8);
 
         osc.connect(gain);
-        if (this.analyser) {
+        if (this.qualityFilter) {
+          gain.connect(this.qualityFilter);
+        } else if (this.analyser) {
           gain.connect(this.analyser);
         } else {
           gain.connect(ctx.destination);

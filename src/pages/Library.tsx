@@ -10,7 +10,7 @@ import { AlbumCard } from '@/components/ui/AlbumCard';
 import { ArtistCard } from '@/components/ui/ArtistCard';
 import { PlaylistCard } from '@/components/ui/PlaylistCard';
 import { MusicCard } from '@/components/ui/MusicCard';
-import { albums as demoAlbums, artists as demoArtists, playlists as demoPlaylists, tracks as demoTracks } from '@/data/demo';
+import { albums as demoAlbums, artists as demoArtists, playlists as demoPlaylists } from '@/data/demo';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -153,9 +153,9 @@ export default function Library() {
   const { playTrack, playQueue } = usePlayerStore();
   const { addToast } = useUIStore();
 
-  // Combine demo and admin items deduplicated by id
+  // Catalog songs deduplicated by id
   const allTracks = useMemo(() => {
-    const combined = [...adminSongs, ...demoTracks];
+    const combined = [...adminSongs];
     const seen = new Set<string>();
     return combined.filter((t) => {
       if (seen.has(t.id)) return false;

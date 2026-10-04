@@ -2,11 +2,14 @@
 import { motion } from 'framer-motion';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileAudio, Image as ImageIcon, X, RefreshCw } from 'lucide-react';
 import { validateAudioFile, validateImageFile, uploadMediaWithProgress } from '@/services/storageService';
+import { uploadToSupabase, type UploadOptions } from '@/services/supabaseStorageService';
 import { cn } from '@/utils/cn';
 
 interface FileUploadZoneProps {
   type: 'audio' | 'image';
   storagePath: string;
+  storageBackend?: 'firebase' | 'supabase';
+  supabaseBucket?: 'songs' | 'covers' | 'avatars';
   currentUrl?: string;
   onUploadSuccess: (url: string) => void;
   onFileSelect?: (file: File | File[]) => void;
@@ -19,6 +22,8 @@ interface FileUploadZoneProps {
 export function FileUploadZone({
   type,
   storagePath,
+  storageBackend = 'firebase',
+  supabaseBucket,
   currentUrl,
   onUploadSuccess,
   onFileSelect,
@@ -58,7 +63,7 @@ export function FileUploadZone({
     setProgress(5);
 
     try {
-      await uploadMediaWithProgress(storagePath, selectedFile, {
+      const uploadOptions: UploadOptions = {
         onProgress: (p) => setProgress(p),
         onError: (err) => {
           setStatus('error');
@@ -70,7 +75,18 @@ export function FileUploadZone({
           setPreviewUrl(url);
           onUploadSuccess(url);
         },
-      });
+      };
+
+      if (storageBackend === 'supabase') {
+        await uploadToSupabase(
+          supabaseBucket ?? (type === 'audio' ? 'songs' : 'covers'),
+          storagePath,
+          selectedFile,
+          uploadOptions
+        );
+      } else {
+        await uploadMediaWithProgress(storagePath, selectedFile, uploadOptions);
+      }
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err?.message || 'Upload could not be completed.');

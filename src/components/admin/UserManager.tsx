@@ -5,22 +5,83 @@ import {
   Clock, Heart, ListMusic, PlayCircle, X, MapPin, Mail, Calendar
 } from 'lucide-react';
 import { useAdminStore } from '@/store/adminStore';
+import { useAuthStore } from '@/store/authStore';
+import { useLibraryStore } from '@/store/libraryStore';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { ManagedUser } from '@/types/admin';
 import { formatTimeAgo, formatNumber } from '@/utils/cn';
 
 export function UserManager() {
   const { users, toggleUserBlock, deleteUser } = useAdminStore();
+  const currentUser = useAuthStore((s) => s.user);
+  const likedSongIds = useLibraryStore((s) => s.likedSongIds);
+  const userPlaylists = useLibraryStore((s) => s.userPlaylists);
+  const recentlyPlayed = useLibraryStore((s) => s.recentlyPlayed);
+
+  // Ensure the currently logged-in user is included in the list even if not seeded yet
+  const userExists = currentUser
+    ? users.some(
+        (u) =>
+          u.id === currentUser.uid ||
+          (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+      )
+    : true;
+
+  const baseUsers = currentUser && !userExists
+    ? [
+        {
+          id: currentUser.uid,
+          email: currentUser.email || 'user@melodix.music',
+          displayName: currentUser.displayName || 'Current User',
+          username: currentUser.username || 'user',
+          photoURL: currentUser.photoURL || undefined,
+          role: ((currentUser as any).role || 'listener') as ManagedUser['role'],
+          status: ((currentUser as any).status || 'active') as 'active' | 'blocked',
+          joinedAt: currentUser.createdAt || Date.now(),
+          lastActive: Date.now(),
+          playsCount: recentlyPlayed.length,
+          likedCount: likedSongIds.length,
+          playlistsCount: userPlaylists.length,
+          country: 'Local User',
+        },
+        ...users,
+      ]
+    : users;
+
+  // Enrich admin user list with real-time data for the currently logged-in user
+  const enrichedUsers = baseUsers.map((u) => {
+    if (
+      currentUser &&
+      (u.id === currentUser.uid ||
+        (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()))
+    ) {
+      return {
+        ...u,
+        playsCount: Math.max(u.playsCount || 0, recentlyPlayed.length),
+        likedCount: likedSongIds.length,
+        playlistsCount: userPlaylists.length,
+        lastActive: Date.now(),
+        displayName: currentUser.displayName || u.displayName,
+        email: currentUser.email || u.email,
+        photoURL: currentUser.photoURL || u.photoURL,
+        status: u.status,
+      };
+    }
+    return u;
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'creator' | 'listener'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
 
   const [inspectingUser, setInspectingUser] = useState<ManagedUser | null>(null);
+  const currentInspecting = inspectingUser
+    ? enrichedUsers.find((u) => u.id === inspectingUser.id) || inspectingUser
+    : null;
   const [deletingUser, setDeletingUser] = useState<ManagedUser | null>(null);
   const [blockingUser, setBlockingUser] = useState<ManagedUser | null>(null);
 
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = enrichedUsers.filter((u) => {
     const matchesQuery =
       u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -200,7 +261,7 @@ export function UserManager() {
 
       {/* ── User Activity Inspector Modal ────────────────────────────────────── */}
       <AnimatePresence>
-        {inspectingUser && (
+        {currentInspecting && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
@@ -219,22 +280,22 @@ export function UserManager() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3.5">
                   <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/10 border border-white/10 shadow-lg">
-                    {inspectingUser.photoURL ? (
-                      <img src={inspectingUser.photoURL} alt="" className="w-full h-full object-cover" />
+                    {currentInspecting.photoURL ? (
+                      <img src={currentInspecting.photoURL} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white/50">
-                        {inspectingUser.displayName.charAt(0)}
+                        {currentInspecting.displayName.charAt(0)}
                       </div>
                     )}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-bold text-white">{inspectingUser.displayName}</h3>
+                      <h3 className="text-lg font-bold text-white">{currentInspecting.displayName}</h3>
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-                        {inspectingUser.role}
+                        {currentInspecting.role}
                       </span>
                     </div>
-                    <p className="text-xs text-white/40 font-mono mt-0.5">@{inspectingUser.username}</p>
+                    <p className="text-xs text-white/40 font-mono mt-0.5">@{currentInspecting.username}</p>
                   </div>
                 </div>
 
@@ -250,15 +311,15 @@ export function UserManager() {
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2 text-white/60 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                   <Mail size={14} className="text-cyan-400" />
-                  <span>{inspectingUser.email}</span>
+                  <span>{currentInspecting.email}</span>
                 </div>
                 <div className="flex items-center gap-2 text-white/60 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                   <MapPin size={14} className="text-pink-400" />
-                  <span>{inspectingUser.country || 'Global Listener'}</span>
+                  <span>{currentInspecting.country || 'Global Listener'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-white/60 p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                   <Calendar size={14} className="text-violet-400" />
-                  <span>Member since {new Date(inspectingUser.joinedAt).toLocaleDateString()}</span>
+                  <span>Member since {new Date(currentInspecting.joinedAt).toLocaleDateString()}</span>
                 </div>
               </div>
 
@@ -267,7 +328,7 @@ export function UserManager() {
                 <div className="glass p-3.5 rounded-2xl border border-white/5 text-center">
                   <PlayCircle size={16} className="mx-auto text-violet-400 mb-1" />
                   <span className="font-display text-lg font-bold text-white block">
-                    {formatNumber(inspectingUser.playsCount)}
+                    {formatNumber(currentInspecting.playsCount)}
                   </span>
                   <span className="text-[10px] text-white/40 uppercase">Plays</span>
                 </div>
@@ -275,7 +336,7 @@ export function UserManager() {
                 <div className="glass p-3.5 rounded-2xl border border-white/5 text-center">
                   <Heart size={16} className="mx-auto text-pink-400 mb-1" />
                   <span className="font-display text-lg font-bold text-white block">
-                    {inspectingUser.likedCount}
+                    {currentInspecting.likedCount}
                   </span>
                   <span className="text-[10px] text-white/40 uppercase">Liked Songs</span>
                 </div>
@@ -283,7 +344,7 @@ export function UserManager() {
                 <div className="glass p-3.5 rounded-2xl border border-white/5 text-center">
                   <ListMusic size={16} className="mx-auto text-cyan-400 mb-1" />
                   <span className="font-display text-lg font-bold text-white block">
-                    {inspectingUser.playlistsCount}
+                    {currentInspecting.playlistsCount}
                   </span>
                   <span className="text-[10px] text-white/40 uppercase">Playlists</span>
                 </div>
@@ -293,23 +354,22 @@ export function UserManager() {
               <div className="flex items-center justify-between pt-2 border-t border-white/5">
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-white/40">Account Status:</span>
-                  <span className={inspectingUser.status === 'blocked' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                    {inspectingUser.status.toUpperCase()}
+                  <span className={currentInspecting.status === 'blocked' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                    {currentInspecting.status.toUpperCase()}
                   </span>
                 </div>
 
                 <button
                   onClick={() => {
-                    toggleUserBlock(inspectingUser.id);
-                    setInspectingUser(null);
+                    toggleUserBlock(currentInspecting.id);
                   }}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-                    inspectingUser.status === 'blocked'
+                    currentInspecting.status === 'blocked'
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                       : 'bg-amber-600 hover:bg-amber-500 text-white'
                   }`}
                 >
-                  {inspectingUser.status === 'blocked' ? 'Unblock User' : 'Block User'}
+                  {currentInspecting.status === 'blocked' ? 'Unblock User' : 'Block User'}
                 </button>
               </div>
             </motion.div>

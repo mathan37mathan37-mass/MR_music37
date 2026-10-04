@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { Track, RepeatMode } from '@/types';
-import { tracks } from '@/data/demo';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { audioEngine } from '@/audio/audioEngine';
 import { useLibraryStore } from '@/store/libraryStore';
@@ -101,8 +100,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     }
   });
 
-  const initialTrack = isFirebaseConfigured() ? null : tracks[0];
-  const initialQueue = isFirebaseConfigured() ? [] : tracks.slice(0, 8);
+  const initialTrack: Track | null = null;
+  const initialQueue: Track[] = [];
 
   return {
     currentTrack: initialTrack,

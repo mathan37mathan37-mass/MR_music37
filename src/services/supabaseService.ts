@@ -91,7 +91,8 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
       createdAt: new Date(data.created_at).getTime(),
       updatedAt: new Date(data.updated_at).getTime(),
       role: data.role ?? 'user',
-    } as any;
+      status: (data.status === 'blocked' ? 'blocked' : 'active'),
+    };
 
     return profile;
   } catch (err) {
@@ -695,20 +696,51 @@ export async function fetchAllUsersFromFirestore(): Promise<ManagedUser[]> {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url, role, created_at, updated_at');
+    const [profilesRes, likesRes, playlistsRes, historyRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, role, status, created_at, updated_at'),
+      supabase.from('liked_songs').select('user_id'),
+      supabase.from('playlists').select('user_id'),
+      supabase.from('listening_history').select('user_id, played_at'),
+    ]);
 
-    if (error) {
-      console.warn('fetchAllUsers error:', error.message);
+    if (profilesRes.error) {
+      console.warn('fetchAllUsers error:', profilesRes.error.message);
       return [];
     }
 
-    return (data ?? []).map((row) => {
+    const likesMap = new Map<string, number>();
+    (likesRes.data ?? []).forEach((row: any) => {
+      if (row.user_id) likesMap.set(row.user_id, (likesMap.get(row.user_id) ?? 0) + 1);
+    });
+
+    const playlistsMap = new Map<string, number>();
+    (playlistsRes.data ?? []).forEach((row: any) => {
+      if (row.user_id) playlistsMap.set(row.user_id, (playlistsMap.get(row.user_id) ?? 0) + 1);
+    });
+
+    const playsMap = new Map<string, number>();
+    const lastActiveMap = new Map<string, number>();
+    (historyRes.data ?? []).forEach((row: any) => {
+      if (row.user_id) {
+        playsMap.set(row.user_id, (playsMap.get(row.user_id) ?? 0) + 1);
+        const time = row.played_at ? new Date(row.played_at).getTime() : 0;
+        if (time > (lastActiveMap.get(row.user_id) ?? 0)) {
+          lastActiveMap.set(row.user_id, time);
+        }
+      }
+    });
+
+    return (profilesRes.data ?? []).map((row) => {
       const role: ManagedUser['role'] =
         row.role === 'admin' ? 'admin' :
         row.role === 'creator' ? 'creator' :
         'listener';
+
+      const rowUpdatedAt = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
+      const historyLatest = lastActiveMap.get(row.id) ?? 0;
+      const lastActive = Math.max(rowUpdatedAt, historyLatest);
 
       return {
         id: row.id,
@@ -717,13 +749,13 @@ export async function fetchAllUsersFromFirestore(): Promise<ManagedUser[]> {
         username: row.username ?? '',
         photoURL: row.avatar_url ?? undefined,
         role,
-        status: 'active',
+        status: (row.status === 'blocked' ? 'blocked' : 'active') as 'active' | 'blocked',
         joinedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-        lastActive: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
-        playsCount: 0,
-        likedCount: 0,
-        playlistsCount: 0,
-        country: 'Unknown',
+        lastActive,
+        playsCount: playsMap.get(row.id) ?? 0,
+        likedCount: likesMap.get(row.id) ?? 0,
+        playlistsCount: playlistsMap.get(row.id) ?? 0,
+        country: 'Global Listener',
       } satisfies ManagedUser;
     });
   } catch (err) {

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Track, Artist, Album } from '@/types';
-import { isFirebaseConfigured } from '@/services/firebase';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import type {
   AdminTab,
@@ -106,7 +105,7 @@ const SEED_USERS: ManagedUser[] = [
   },
 ];
 
-const isLiveBackend = isSupabaseConfigured() || isFirebaseConfigured();
+const isLiveBackend = isSupabaseConfigured();
 const initialCatalogSongs = isLiveBackend ? [] as Track[] : initialTracks;
 const initialCatalogArtists = isLiveBackend ? [] as Artist[] : initialArtists;
 const initialCatalogAlbums = isLiveBackend ? [] as Album[] : initialAlbums;
@@ -173,6 +172,7 @@ interface AdminState {
   // Users Management
   toggleUserBlock: (userId: string) => void;
   deleteUser: (userId: string) => void;
+  deleteMultipleSongs: (ids: string[]) => void;
 
   // Audit Log
   logActivity: (log: Omit<AdminActivityLog, 'id' | 'timestamp'>) => void;
@@ -194,11 +194,19 @@ const getLocalDemoUserMetrics = (): ManagedUser[] => {
 
   try {
     const profile = JSON.parse(savedUser);
-    const libBlob = localStorage.getItem(`melodix-library-storage-${profile.uid}`);
-    const libraryState = libBlob ? JSON.parse(libBlob)?.state || JSON.parse(libBlob) : {};
+    const uid = profile.uid;
+    const libBlob = localStorage.getItem(`melodix-library-storage-${uid}`) ||
+                    localStorage.getItem('melodix-library-storage-guest');
+    let libraryState: any = {};
+    if (libBlob) {
+      try {
+        const parsed = JSON.parse(libBlob);
+        libraryState = parsed?.state || parsed || {};
+      } catch { /* ignore */ }
+    }
 
     const mappedUser: ManagedUser = {
-      id: profile.uid,
+      id: uid,
       email: profile.email || 'demo@melodix.music',
       displayName: profile.displayName || 'Demo User',
       username: profile.username || 'demo_user',
@@ -566,6 +574,23 @@ export const useAdminStore = create<AdminState>()(
           details: `Permanently removed user account (${user.email})`,
         });
       },
+
+      deleteMultipleSongs: (ids) => {
+        const { songs, logActivity } = get();
+        const targets = songs.filter((s) => ids.includes(s.id));
+        if (!targets.length) return;
+
+        set({ songs: songs.filter((s) => !ids.includes(s.id)) });
+        targets.forEach((s) => adminDeleteSongFromFirestore(s.id));
+
+        logActivity({
+          action: 'delete',
+          entityType: 'song',
+          entityTitle: `${targets.length} songs`,
+          adminName: 'Admin',
+          details: `Bulk deleted ${targets.length} songs from catalog`,
+        });
+      },
     }),
     {
       name: 'melodix-admin-storage',
@@ -573,7 +598,17 @@ export const useAdminStore = create<AdminState>()(
       storage: {
         getItem: (name) => {
           const str = localStorage.getItem(name);
-          return str ? JSON.parse(str) : null;
+          if (!str) return null;
+          try {
+            const parsed = JSON.parse(str);
+            if (parsed?.state?.songs) {
+              const DEMO_IDS = new Set(['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12','t13','t14','t15','t16']);
+              parsed.state.songs = parsed.state.songs.filter((s: any) => !DEMO_IDS.has(s.id));
+            }
+            return parsed;
+          } catch {
+            return null;
+          }
         },
         setItem: (name, value) => {
           try {

@@ -1,13 +1,13 @@
 /**
  * musicMetadataService.ts
  *
- * Professional in-browser audio metadata extraction engine using music-metadata-browser.
+ * Professional in-browser audio metadata extraction engine using music-metadata.
  * Extracts ID3v1, ID3v2, MP4/AAC, FLAC, Vorbis/OGG, and WAV metadata,
  * extracts embedded artwork into Blobs/URLs, parses multiple artists,
  * provides intelligent filename cleaning, and fallback duration detection.
  */
 
-import { parseBlob } from 'music-metadata-browser';
+import { parseBlob } from 'music-metadata';
 import type { ArtworkSourceType, MetadataConfidenceSource } from '@/types/admin';
 
 export interface ExtractedArtwork {
@@ -246,7 +246,7 @@ export function extractArtworkFromPictures(pictures?: any[]): ExtractedArtwork |
 // ── 5. MAIN AUDIO FILE ANALYZER ──────────────────────────────────────────────
 
 /**
- * Analyzes an audio file using music-metadata-browser, extracting complete tags,
+ * Analyzes an audio file using music-metadata, extracting complete tags,
  * embedded cover art, bitrate, duration, and fallback confidence ratings.
  */
 export async function analyzeAudioFile(

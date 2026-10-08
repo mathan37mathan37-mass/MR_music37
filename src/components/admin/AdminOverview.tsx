@@ -148,10 +148,16 @@ export function AdminOverview({
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={onOpenCreateSong}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
+            onClick={() => onNavigateTab('import')}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-violet-600/25 transition-all cursor-pointer"
           >
-            <Plus size={14} /> New Song
+            <Plus size={14} /> Import Music Folder
+          </button>
+          <button
+            onClick={onOpenCreateSong}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition-all cursor-pointer"
+          >
+            <Music size={14} className="text-violet-400" /> New Song
           </button>
           <button
             onClick={onOpenCreateArtist}

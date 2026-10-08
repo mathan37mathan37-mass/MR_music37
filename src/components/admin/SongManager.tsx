@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Music, Plus, Search, Edit2, Trash2, Play, Pause,
   Calendar, Disc, Mic2, Tag, FileText, Check, X,
   Clock, ExternalLink, Sparkles, UploadCloud, FileAudio,
-  Image as ImageIcon, RefreshCw, AlertTriangle, CheckCircle2
+  Image as ImageIcon, RefreshCw, AlertTriangle, CheckCircle2,
+  FolderUp
 } from 'lucide-react';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -12,11 +13,14 @@ import { useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
 import { FileUploadZone } from './FileUploadZone';
 import { ConfirmDialog } from './ConfirmDialog';
+import { BulkFolderImport } from './BulkFolderImport';
 import type { Track } from '@/types';
 import type { SongFormData } from '@/types/admin';
 import { validateAudioFile, validateImageFile } from '@/services/storageService';
 import { uploadSongAudio, uploadSongCover } from '@/services/supabaseStorageService';
 import { formatDuration, cn } from '@/utils/cn';
+import { matchSongSearch } from '@/utils/searchUtils';
+import { deduplicateCatalog } from '@/services/musicIdentityService';
 
 const GENRES = [
   'Electronic', 'Synthwave', 'Indie Pop', 'Alternative',
@@ -60,8 +64,10 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
+  const [songAgeFilter, setSongAgeFilter] = useState<'all' | 'newly_added' | 'old_songs'>('all');
   const [editingSong, setEditingSong] = useState<Track | null>(null);
   const [showAddModal, setShowAddModal] = useState(isCreateOpen);
+  const [showBulkFolderModal, setShowBulkFolderModal] = useState(false);
   const [deletingSong, setDeletingSong] = useState<Track | null>(null);
   const [titleError, setTitleError] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -94,14 +100,49 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
   const [lyricLineText, setLyricLineText] = useState('');
   const [lyricLineTime, setLyricLineTime] = useState<number>(30);
 
-  const filteredSongs = songs.filter((s) => {
-    const matchesQuery =
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.album.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGenre = selectedGenre === 'all' || s.genre === selectedGenre;
-    return matchesQuery && matchesGenre;
-  });
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+
+  const handleRunDeduplication = async () => {
+    setIsDeduplicating(true);
+    try {
+      const res = await deduplicateCatalog();
+      if (res.duplicateSongsFound > 0 || res.duplicateArtistsFound > 0 || res.duplicateAlbumsFound > 0) {
+        addToast(`Deduplication complete: Removed ${res.duplicateSongsFound} duplicate songs, merged ${res.duplicateArtistsFound} duplicate artists & ${res.duplicateAlbumsFound} duplicate albums across ${res.songsReassigned} songs.`, 'success');
+      } else {
+        addToast('Catalog is already clean! No duplicate songs, artists, or albums found.', 'info');
+      }
+    } catch (err) {
+      addToast(`Deduplication error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
+  const filteredSongs = useMemo(() => {
+    let list = songs.filter((s) => {
+      const matchesQuery = matchSongSearch(s, searchQuery);
+      const matchesGenre = selectedGenre === 'all' || s.genre === selectedGenre;
+      return matchesQuery && matchesGenre;
+    });
+
+    if (songAgeFilter === 'newly_added') {
+      return [...list].sort((a, b) => {
+        const timeA = a.createdAt || (parseInt(a.id.replace(/\D/g, ''), 10) || 0);
+        const timeB = b.createdAt || (parseInt(b.id.replace(/\D/g, ''), 10) || 0);
+        return timeB - timeA || (b.year || 0) - (a.year || 0);
+      });
+    }
+
+    if (songAgeFilter === 'old_songs') {
+      return [...list].sort((a, b) => {
+        const timeA = a.createdAt || (parseInt(a.id.replace(/\D/g, ''), 10) || 0);
+        const timeB = b.createdAt || (parseInt(b.id.replace(/\D/g, ''), 10) || 0);
+        return timeA - timeB || (a.year || 0) - (b.year || 0);
+      });
+    }
+
+    return list;
+  }, [songs, searchQuery, selectedGenre, songAgeFilter]);
 
   const totalBulkSize = bulkFiles.reduce((sum, item) => sum + item.file.size, 0);
   const bulkCompleted = bulkFiles.filter((item) => item.status === 'completed').length;
@@ -244,7 +285,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
   };
 
   const handleRemoveLyricLine = (index: number) => {
-    const updated = (formData.lyrics || []).filter((_, i) => i !== index);
+    const updated = (formData.lyrics || []).filter((_: any, i: number) => i !== index);
     setFormData({ ...formData, lyrics: updated });
   };
 
@@ -434,45 +475,155 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
           </select>
 
           <button
+            type="button"
+            onClick={() => setShowBulkFolderModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-violet-600/30 transition-all cursor-pointer"
+          >
+            <FolderUp size={14} /> Import Music Folder
+          </button>
+
+          <button
             onClick={() => {
               setEditingSong(null);
               setShowAddModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 transition-all cursor-pointer"
           >
             <Plus size={14} /> Add Song
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        {/* Bulk delete bar */}
-        {selectedSongIds.size > 0 && (
-          <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/20">
-            <span className="text-xs text-rose-300 font-semibold">{selectedSongIds.size} song{selectedSongIds.size !== 1 ? 's' : ''} selected</span>
-            <button
-              type="button"
-              onClick={() => setBulkDeleteOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold transition-colors"
+      {/* ── Radio Button Filter for New vs Old Songs ──────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-4 p-3 rounded-2xl bg-white/[0.03] border border-white/8">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider pl-1">
+            Filter & Sort:
+          </span>
+          <div className="flex items-center gap-1.5 p-1 bg-black/40 rounded-xl border border-white/5" role="radiogroup" aria-label="Filter songs by age">
+            {/* All Songs Radio */}
+            <label
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                songAgeFilter === 'all'
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
             >
-              <Trash2 size={12} /> Delete Selected
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedSongIds(new Set())}
-              className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+              <input
+                type="radio"
+                name="songAgeRadio"
+                value="all"
+                checked={songAgeFilter === 'all'}
+                onChange={() => setSongAgeFilter('all')}
+                className="sr-only"
+              />
+              <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
+                songAgeFilter === 'all' ? 'border-white bg-white' : 'border-white/40'
+              }`}>
+                {songAgeFilter === 'all' && <span className="w-1.5 h-1.5 rounded-full bg-violet-600" />}
+              </span>
+              <span>All Songs</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                songAgeFilter === 'all' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40'
+              }`}>
+                {songs.length}
+              </span>
+            </label>
+
+            {/* Newly Added Radio */}
+            <label
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                songAgeFilter === 'newly_added'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
             >
-              <X size={12} />
-            </button>
+              <input
+                type="radio"
+                name="songAgeRadio"
+                value="newly_added"
+                checked={songAgeFilter === 'newly_added'}
+                onChange={() => setSongAgeFilter('newly_added')}
+                className="sr-only"
+              />
+              <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
+                songAgeFilter === 'newly_added' ? 'border-white bg-white' : 'border-white/40'
+              }`}>
+                {songAgeFilter === 'newly_added' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />}
+              </span>
+              <Sparkles size={12} className={songAgeFilter === 'newly_added' ? 'text-white' : 'text-emerald-400'} />
+              <span>Newly Added Songs</span>
+            </label>
+
+            {/* Old Songs Radio */}
+            <label
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                songAgeFilter === 'old_songs'
+                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <input
+                type="radio"
+                name="songAgeRadio"
+                value="old_songs"
+                checked={songAgeFilter === 'old_songs'}
+                onChange={() => setSongAgeFilter('old_songs')}
+                className="sr-only"
+              />
+              <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
+                songAgeFilter === 'old_songs' ? 'border-white bg-white' : 'border-white/40'
+              }`}>
+                {songAgeFilter === 'old_songs' && <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />}
+              </span>
+              <Clock size={12} className={songAgeFilter === 'old_songs' ? 'text-white' : 'text-amber-400'} />
+              <span>Old / Existing Songs</span>
+            </label>
           </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setBulkModalOpen(true)}
-          className="ml-auto flex items-center gap-2 rounded-2xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 px-4 py-2 text-xs font-semibold text-violet-200 transition-colors"
-        >
-          <UploadCloud size={14} /> Upload Multiple Songs
-        </button>
+        </div>
+
+        {/* Right action button */}
+        <div className="flex items-center gap-2">
+          {/* Bulk delete bar */}
+          {selectedSongIds.size > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <span className="text-xs text-rose-300 font-semibold">{selectedSongIds.size} selected</span>
+              <button
+                type="button"
+                onClick={() => setBulkDeleteOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Trash2 size={11} /> Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedSongIds(new Set())}
+                className="p-1 rounded-md hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleRunDeduplication}
+            disabled={isDeduplicating}
+            className="flex items-center gap-2 rounded-xl border border-pink-500/30 bg-pink-500/10 hover:bg-pink-500/20 px-3.5 py-1.5 text-xs font-semibold text-pink-200 transition-colors cursor-pointer disabled:opacity-50"
+            title="Scan & Merge duplicate artist and album identities"
+          >
+            <Sparkles size={13} className={isDeduplicating ? 'animate-spin text-pink-400' : 'text-pink-400'} />
+            <span>{isDeduplicating ? 'Cleaning...' : 'Deduplicate Catalog'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBulkModalOpen(true)}
+            className="flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 px-3.5 py-1.5 text-xs font-semibold text-violet-200 transition-colors cursor-pointer"
+          >
+            <UploadCloud size={13} /> Upload Multiple
+          </button>
+        </div>
       </div>
 
       <div className="glass rounded-3xl border border-white/5 overflow-hidden">
@@ -530,23 +681,20 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                     </td>
                     <td className="py-3 px-4 text-white/30 tabular-nums">{idx + 1}</td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="relative w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 shadow">
-                          <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
+                      <div className="flex items-center gap-3.5">
+                        <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 shadow bg-black/40">
+                          <img src={song.coverUrl || DEFAULT_COVER} alt={song.title} className="w-full h-full object-cover" />
                           <button
                             onClick={() => (isCurrent ? togglePlay() : playTrack(song))}
                             className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
                           >
-                            {isPlayingThis ? <Pause size={14} fill="white" /> : <Play size={14} fill="white" className="ml-0.5" />}
+                            {isPlayingThis ? <Pause size={16} fill="white" /> : <Play size={16} fill="white" className="ml-0.5" />}
                           </button>
                         </div>
-                        <div className="min-w-0">
-                          <p className={`font-semibold truncate ${isCurrent ? 'text-violet-400' : 'text-white'}`}>{song.title}</p>
-                          <span className="text-[10px] text-white/40 flex items-center gap-1.5">
-                            {song.lyrics?.length ? (
-                              <span className="text-emerald-400 flex items-center gap-0.5"><Check size={10} /> Lyrics synced</span>
-                            ) : 'No lyrics'}
-                          </span>
+                        <div className="min-w-0 max-w-xs md:max-w-sm">
+                          <p className={`font-semibold truncate text-sm ${isCurrent ? 'text-violet-400' : 'text-white'}`}>{song.title}</p>
+                          <p className="text-xs text-white/50 truncate">{song.artist}</p>
+                          {song.fileName && <p className="text-[10px] text-white/30 truncate font-mono">{song.fileName}</p>}
                         </div>
                       </div>
                     </td>
@@ -651,7 +799,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                       supabaseBucket="songs"
                       currentUrl={formData.audioUrl}
                       onUploadSuccess={(url) => {
-                        setFormData((prev) => ({ ...prev, audioUrl: url }));
+                        setFormData((prev: SongFormData) => ({ ...prev, audioUrl: url }));
                         addToast('Audio master ready', 'success');
                       }}
                       onFileSelect={(selectedFile) => {
@@ -660,7 +808,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                         const cleaned = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
                         const formatted = cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
                         if (formatted) {
-                          setFormData((prev) => ({ ...prev, title: formatted }));
+                          setFormData((prev: SongFormData) => ({ ...prev, title: formatted }));
                           setTitleError(false);
                         }
                       }}
@@ -675,7 +823,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                       supabaseBucket="covers"
                       currentUrl={formData.coverUrl}
                       onUploadSuccess={(url) => {
-                        setFormData((prev) => ({ ...prev, coverUrl: url }));
+                        setFormData((prev: SongFormData) => ({ ...prev, coverUrl: url }));
                         addToast('Artwork attached', 'success');
                       }}
                       label="Upload Album Artwork *"
@@ -695,7 +843,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                       <button type="button" onClick={handleAddLyricLine} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors">Add Line</button>
                     </div>
                     <div className="max-h-36 overflow-y-auto divide-y divide-white/5 space-y-1 pr-1">
-                      {formData.lyrics?.map((line, lIdx) => (
+                      {formData.lyrics?.map((line: { time: number; text: string }, lIdx: number) => (
                         <div key={lIdx} className="flex items-center justify-between py-1 text-[11px] text-white/70 group">
                           <div className="flex items-center gap-2 truncate">
                             <span className="text-violet-400 font-mono w-10 tabular-nums">{formatDuration(line.time)}</span>
@@ -998,6 +1146,46 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
         }}
         onClose={() => setBulkDeleteOpen(false)}
       />
+
+      {/* ── Smart Bulk Music Folder Import Modal ────────────────────────────── */}
+      <AnimatePresence>
+        {showBulkFolderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/85 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="w-full max-w-6xl bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 my-auto max-h-[92vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-600/30">
+                    <FolderUp size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      Bulk Music Folder Import & Automatic Metadata
+                    </h3>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      Scan folders, extract embedded tags & artwork, resolve conflicts, and batch sync
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBulkFolderModal(false)}
+                  className="p-2.5 rounded-2xl bg-[var(--color-bg-overlay)] hover:bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:text-white transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <BulkFolderImport onFinish={() => setShowBulkFolderModal(false)} />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useAdminStore } from '@/store/adminStore';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { AdminGate } from '@/components/admin/AdminGate';
+import { ProtectedAdminRoute } from '@/components/auth/ProtectedAdminRoute';
 import { useUIStore } from '@/store/uiStore';
 
 const Home = lazy(() => import('@/pages/Home'));
@@ -94,7 +94,7 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<AppLoadingFallback />}>
           <Routes>
-            <Route path="/admin" element={<AdminGate><Admin /></AdminGate>} />
+            <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Home />} />

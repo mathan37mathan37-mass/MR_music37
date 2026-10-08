@@ -8,41 +8,43 @@ import {
 import { cn } from '@/utils/cn';
 import { useUIStore } from '@/store/uiStore';
 import { useLibraryStore } from '@/store/libraryStore';
-
-const navSections = [
-  {
-    label: 'Main',
-    items: [
-      { icon: Home, label: 'Home', to: '/' },
-      { icon: Compass, label: 'Explore', to: '/explore' },
-      { icon: Search, label: 'Search', to: '/search' },
-      { icon: Library, label: 'Library', to: '/library' },
-    ],
-  },
-  {
-    label: 'Your Music',
-    items: [
-      { icon: Heart, label: 'Liked Songs', to: '/liked' },
-      { icon: Clock, label: 'Recently Played', to: '/recently-played' },
-      { icon: BarChart3, label: 'Analytics', to: '/stats' },
-      { icon: ListMusic, label: 'Playlists', to: '/playlists' },
-      { icon: Disc3, label: 'Albums', to: '/albums' },
-      { icon: Mic2, label: 'Artists', to: '/artists' },
-      { icon: Download, label: 'Downloads', to: '/downloads' },
-    ],
-  },
-  {
-    label: 'Platform',
-    items: [
-      { icon: Shield, label: 'Admin Portal', to: '/admin' },
-      { icon: Settings, label: 'Settings', to: '/settings' },
-    ],
-  },
-];
+import { useAdmin } from '@/hooks/useAdmin';
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
   const { userPlaylists } = useLibraryStore();
+  const { isAdmin } = useAdmin();
+
+  const navSections = [
+    {
+      label: 'Main',
+      items: [
+        { icon: Home, label: 'Home', to: '/' },
+        { icon: Compass, label: 'Explore', to: '/explore' },
+        { icon: Search, label: 'Search', to: '/search' },
+        { icon: Library, label: 'Library', to: '/library' },
+      ],
+    },
+    {
+      label: 'Your Music',
+      items: [
+        { icon: Heart, label: 'Liked Songs', to: '/liked' },
+        { icon: Clock, label: 'Recently Played', to: '/recently-played' },
+        { icon: BarChart3, label: 'Analytics', to: '/stats' },
+        { icon: ListMusic, label: 'Playlists', to: '/playlists' },
+        { icon: Disc3, label: 'Albums', to: '/albums' },
+        { icon: Mic2, label: 'Artists', to: '/artists' },
+        { icon: Download, label: 'Downloads', to: '/downloads' },
+      ],
+    },
+    {
+      label: 'Platform',
+      items: [
+        ...(isAdmin ? [{ icon: Shield, label: 'Admin Portal', to: '/admin' }] : []),
+        { icon: Settings, label: 'Settings', to: '/settings' },
+      ],
+    },
+  ];
 
   return (
     <motion.aside

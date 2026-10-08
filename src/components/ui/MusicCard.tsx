@@ -9,6 +9,8 @@ import { formatDuration, formatLargeNumber } from '@/utils/cn';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useOfflineSongs } from '@/hooks/useOfflineSongs';
 import type { Track } from '@/types';
 
 interface MusicCardProps {
@@ -28,7 +30,6 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
   const isDown = useLibraryStore((s) => s.downloadedTrackIds.includes(track.id));
   const { addToast } = useUIStore();
   const [showMenu, setShowMenu] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -60,7 +61,15 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
     setShowMenu((prev) => !prev);
   };
 
+  const { isOnline } = useOnlineStatus();
+  const { downloadSong, removeSong, isDownloading: isHookDownloading } = useOfflineSongs();
+  const isDownloading = isHookDownloading(track.id);
+
   const handlePlay = () => {
+    if (!isOnline && !isDown) {
+      addToast('No internet connection. Download this song for offline playback.', 'info');
+      return;
+    }
     if (isActive) {
       togglePlay();
     } else if (queue && queue.length > 0) {
@@ -92,17 +101,13 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
     addToast(`"${track.title}" will play next`, 'success');
   };
 
-  const handleToggleDownload = (e: React.MouseEvent) => {
+  const handleToggleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(false);
     if (isDown) {
-      toggleDownload(track);
-      addToast(`Removed "${track.title}" from downloads`, 'info');
+      await removeSong(track.id, track.title);
     } else {
-      setIsDownloading(true);
-      toggleDownload(track, false); // cache in IndexedDB for offline playback
-      addToast(`Downloading "${track.title}" for offline playback…`, 'info');
-      setTimeout(() => setIsDownloading(false), 2000);
+      await downloadSong(track);
     }
   };
 

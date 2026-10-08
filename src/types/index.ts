@@ -14,6 +14,19 @@ export interface Track {
   genre: string;
   year: number;
   trackNumber?: number;
+  // Extended Audio Metadata
+  albumArtist?: string;
+  composer?: string;
+  discNumber?: number;
+  bitrate?: number;
+  fileName?: string;
+  originalFileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  metadataSource?: string;
+  artworkSource?: 'embedded' | 'local' | 'online' | 'default' | 'custom';
+  artists?: string[];
+  createdAt?: number;
 }
 
 export interface Album {

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Sparkles, BarChart3, ArrowRight, Flame, Compass, Music2 } from 'lucide-react';
+import { Play, Pause, Sparkles, BarChart3, ArrowRight, Flame, Compass, Music2, WifiOff, HardDrive } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PlaylistCard } from '@/components/ui/PlaylistCard';
@@ -11,6 +11,8 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useAnalyticsStore } from '@/store/analyticsStore';
 import { useAdminStore } from '@/store/adminStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useOfflineSongs } from '@/hooks/useOfflineSongs';
 import { getTimeOfDay } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 import type { Track } from '@/types';
@@ -54,8 +56,17 @@ export default function Home() {
     });
   };
 
-  const { songs: adminSongs } = useAdminStore();
+  const { songs: adminSongs, hydrateCatalog } = useAdminStore();
   const { playCounts, currentStreakDays, totalListeningSeconds } = useAnalyticsStore();
+  const { isOnline, wasOffline } = useOnlineStatus();
+  const { offlineTracks } = useOfflineSongs();
+
+  // Automatic catalog re-sync when network reconnects
+  useEffect(() => {
+    if (isOnline && wasOffline) {
+      void hydrateCatalog();
+    }
+  }, [isOnline, wasOffline, hydrateCatalog]);
 
   const allTracks = useMemo(() => dedupeTracks([...adminSongs]), [adminSongs]);
 
@@ -171,6 +182,32 @@ export default function Home() {
           </div>
         </div>
       </motion.section>
+
+      {/* ── Offline Banner & Available Offline Section ────────────────────── */}
+      {!isOnline && offlineTracks.length > 0 && (
+        <motion.section variants={item} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-emerald-400">
+              <HardDrive size={20} />
+              <h2 className="text-xl font-bold text-white tracking-tight">Available Offline</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                {offlineTracks.length} tracks
+              </span>
+            </div>
+            <Link
+              to="/downloads"
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+            >
+              Manage Downloads →
+            </Link>
+          </div>
+          <div className="glass-dark rounded-2xl border border-white/5 divide-y divide-white/5 overflow-hidden">
+            {offlineTracks.slice(0, 5).map((track, i) => (
+              <MusicCard key={`offline-${track.id}`} track={track} index={i} showIndex queue={offlineTracks} />
+            ))}
+          </div>
+        </motion.section>
+      )}
 
       {/* ── Quick Play ────────────────────────────────────────────────────── */}
       <motion.section variants={item}>

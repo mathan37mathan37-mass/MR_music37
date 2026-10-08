@@ -72,15 +72,16 @@ const defaultPreferences: UserPreferences = {
 
 const DEMO_USER: UserProfile = {
   uid: 'demo-melodix-user-01',
-  email: 'demo@melodix.music',
-  displayName: 'Alex Rivers',
-  username: 'alex_rivers',
+  email: 'admin@mrmusic.com',
+  displayName: 'Admin User',
+  username: 'admin',
   photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80',
   favoriteGenres: ['Synthwave', 'Electronic', 'Lo-Fi'],
   favoriteArtists: [],
   preferences: defaultPreferences,
   createdAt: Date.now() - 1000 * 3600 * 24 * 30,
   updatedAt: Date.now(),
+  role: 'admin',
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -277,6 +278,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
           }
         } catch (err: any) {
           set({ isLoading: false });
+          const raw = err.message || '';
+          if (raw.toLowerCase().includes('failed to fetch') || raw.toLowerCase().includes('network')) {
+            throw new Error(
+              'Cannot connect to Supabase server (Failed to fetch). If your Supabase project is paused, please resume it in your Supabase dashboard or continue using Demo Mode.'
+            );
+          }
           throw new Error(err.message || 'Signup failed');
         }
         return;
@@ -347,6 +354,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
           }
         } catch (err: any) {
           set({ isLoading: false });
+          const raw = err.message || '';
+          if (raw.toLowerCase().includes('failed to fetch') || raw.toLowerCase().includes('network')) {
+            throw new Error(
+              'Cannot connect to Supabase server (Failed to fetch). If your Supabase project is paused, please resume it in your Supabase dashboard or continue using Demo Mode.'
+            );
+          }
           throw new Error(err.message || 'Login failed');
         }
         return;
@@ -402,6 +415,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
           // The onAuthStateChange listener will pick up the session on return
         } catch (err: any) {
           set({ isLoading: false });
+          const raw = err.message || '';
+          if (raw.toLowerCase().includes('failed to fetch') || raw.toLowerCase().includes('network')) {
+            throw new Error(
+              'Cannot connect to Supabase server (Failed to fetch). If your Supabase project is paused, please resume it in your Supabase dashboard or continue using Demo Mode.'
+            );
+          }
           throw new Error(err.message || 'Google sign in failed');
         }
         return;

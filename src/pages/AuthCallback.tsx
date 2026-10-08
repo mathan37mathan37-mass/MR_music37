@@ -17,13 +17,22 @@ export default function AuthCallback() {
   const done = useRef(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const urlError = params.get("error");
-    const urlErrorDesc = params.get("error_description");
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(
+      window.location.hash.startsWith("#")
+        ? window.location.hash.substring(1)
+        : window.location.hash
+    );
+
+    const code = searchParams.get("code") || hashParams.get("code");
+    const urlError = searchParams.get("error") || hashParams.get("error");
+    const urlErrorDesc = searchParams.get("error_description") || hashParams.get("error_description");
+    const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token") || searchParams.get("refresh_token");
 
     console.log("[AuthCallback] URL:", window.location.href);
     console.log("[AuthCallback] code:", code ? "PRESENT" : "MISSING");
+    console.log("[AuthCallback] accessToken:", accessToken ? "PRESENT" : "MISSING");
     console.log("[AuthCallback] error:", urlError ?? "none");
 
     if (!supabase) {
@@ -33,12 +42,12 @@ export default function AuthCallback() {
       return;
     }
 
-    // Provider returned an error (user denied, etc.)
+    // Provider returned an error (user denied, redirect_uri_mismatch, etc.)
     if (urlError) {
       console.error("[AuthCallback] Provider error:", urlError, urlErrorDesc);
       setErrorMsg(urlErrorDesc ?? urlError);
       setStatus("error");
-      setTimeout(() => navigate("/", { replace: true }), 3000);
+      setTimeout(() => navigate("/", { replace: true }), 4000);
       return;
     }
 
@@ -56,7 +65,7 @@ export default function AuthCallback() {
       console.error("[AuthCallback] FAIL:", msg);
       setErrorMsg(msg);
       setStatus("error");
-      setTimeout(() => navigate("/", { replace: true }), 3000);
+      setTimeout(() => navigate("/", { replace: true }), 4000);
     };
 
     // Subscribe to auth events fired AFTER we mount
@@ -68,6 +77,24 @@ export default function AuthCallback() {
     });
 
     const handle = async () => {
+      // ── Step 0: Direct Hash Access Token (Implicit flow) ───────────────────
+      if (accessToken) {
+        console.log("[AuthCallback] Step 0: Setting session from hash token");
+        try {
+          const { data: setRes, error: setErr } = await supabase!.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || "",
+          });
+          if (setRes.session) {
+            succeed();
+            return;
+          }
+          if (setErr) console.warn("[AuthCallback] setSession notice:", setErr.message);
+        } catch (err) {
+          console.warn("[AuthCallback] setSession threw:", err);
+        }
+      }
+
       // ── Step 1: Fast path ──────────────────────────────────────────────────
       const { data: s1 } = await supabase!.auth.getSession();
       console.log("[AuthCallback] Step 1 getSession:", s1.session ? "SESSION FOUND" : "no session");
@@ -82,7 +109,7 @@ export default function AuthCallback() {
         if (poll.session) { succeed(); return; }
       }
 
-      // ── Step 3: Manual exchange (last resort) ──────────────────────────────
+      // ── Step 3: Manual exchange (PKCE code exchange) ───────────────────────
       if (code && !done.current) {
         console.log("[AuthCallback] Step 3: manual exchangeCodeForSession");
         try {
@@ -101,7 +128,7 @@ export default function AuthCallback() {
         }
       }
 
-      if (!done.current) fail("Sign-in could not be completed. Please try again.");
+      if (!done.current) fail("Sign-in could not be completed. Please ensure your production site URL is registered in Supabase Redirect URLs.");
     };
 
     void handle();

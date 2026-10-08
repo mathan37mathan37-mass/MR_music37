@@ -9,31 +9,23 @@ import { MusicCard } from '@/components/ui/MusicCard';
 import { AlbumCard } from '@/components/ui/AlbumCard';
 import { ArtistCard } from '@/components/ui/ArtistCard';
 import { PlaylistCard } from '@/components/ui/PlaylistCard';
-import { tracks as demoTracks, albums, artists, playlists, genres } from '@/data/demo';
-import { isFirebaseConfigured } from '@/services/firebase';
-import { fetchPublicPlaylistsFromFirestore } from '@/services/firestoreService';
+import { tracks as demoTracks, albums as demoAlbums, artists as demoArtists, playlists as demoPlaylists, genres as demoGenres } from '@/data/demo';
+import { fetchPublicPlaylistsFromFirestore } from '@/services/supabaseService';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { cn } from '@/utils/cn';
-import type { Playlist } from '@/types';
+import { matchSongSearch } from '@/utils/searchUtils';
+import type { Playlist, Track, Artist, Album, Genre } from '@/types';
 
 type SearchFilter = 'all' | 'songs' | 'artists' | 'albums' | 'playlists' | 'genres';
 
-const filterTabs: { label: string; value: SearchFilter; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { label: 'All', value: 'all', icon: Filter },
-  { label: 'Songs', value: 'songs', icon: Music },
-  { label: 'Artists', value: 'artists', icon: User },
-  { label: 'Albums', value: 'albums', icon: Disc },
-  { label: 'Playlists', value: 'playlists', icon: ListMusic },
-  { label: 'Genres', value: 'genres', icon: Compass },
-];
-
 const trendingSearches = [
   'Celestial Drift',
+  'Anirudh Ravichander',
   'Synthwave',
+  'Tamil',
   'Late Night Drives',
   'Aurora Nights',
-  'Northern Lights',
   'Ambient Electronic',
   'Focus Mode',
 ];
@@ -44,11 +36,13 @@ export default function Search() {
   const [query, setQuery] = useState(urlQuery);
   const [selectedFilter, setSelectedFilter] = useState<SearchFilter>('all');
   const [isFocused, setIsFocused] = useState(false);
-  const [firestorePublicPlaylists, setFirestorePublicPlaylists] = useState<Playlist[]>([]);
+  const [remotePublicPlaylists, setRemotePublicPlaylists] = useState<Playlist[]>([]);
 
   const adminSongs = useAdminStore((s) => s.songs);
+  const adminArtists = useAdminStore((s) => s.artists);
+  const adminAlbums = useAdminStore((s) => s.albums);
 
-  // Merge admin-uploaded songs with demo tracks, deduplicated by id
+  // 1. Comprehensive Tracks Catalog (Admin + Demo)
   const tracks = useMemo(() => {
     const seen = new Set<string>();
     return [...adminSongs, ...demoTracks].filter((t) => {
@@ -57,6 +51,103 @@ export default function Search() {
       return true;
     });
   }, [adminSongs]);
+
+  // 2. Comprehensive Artists Catalog (Admin + Demo + Synthesized from songs)
+  const artists = useMemo(() => {
+    const artistMap = new Map<string, Artist>();
+
+    // Add admin artists first
+    adminArtists.forEach((a) => artistMap.set(a.name.trim().toLowerCase(), a));
+    // Add demo artists
+    demoArtists.forEach((a) => {
+      const k = a.name.trim().toLowerCase();
+      if (!artistMap.has(k)) artistMap.set(k, a);
+    });
+
+    // Synthesize artist entities from all tracks if missing
+    tracks.forEach((t) => {
+      const mainArtist = t.artist.trim();
+      const mainKey = mainArtist.toLowerCase();
+      if (mainArtist && !artistMap.has(mainKey)) {
+        artistMap.set(mainKey, {
+          id: t.artistId || `art_${mainKey.replace(/\s+/g, '_')}`,
+          name: mainArtist,
+          imageUrl: t.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
+          bio: `Official artist profile for ${mainArtist}`,
+          genres: [t.genre || 'Music'],
+          verified: true,
+          monthlyListeners: 24500,
+          followers: 8200,
+          following: false,
+        });
+      }
+
+      // Collaborating artists
+      if (Array.isArray(t.artists)) {
+        t.artists.forEach((collab) => {
+          const cName = collab.trim();
+          const cKey = cName.toLowerCase();
+          if (cName && !artistMap.has(cKey)) {
+            artistMap.set(cKey, {
+              id: `art_${cKey.replace(/\s+/g, '_')}`,
+              name: cName,
+              imageUrl: t.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
+              bio: `Artist profile for ${cName}`,
+              genres: [t.genre || 'Music'],
+              verified: true,
+              monthlyListeners: 18000,
+              followers: 4500,
+              following: false,
+            });
+          }
+        });
+      }
+    });
+
+    return Array.from(artistMap.values());
+  }, [adminArtists, tracks]);
+
+  // 3. Comprehensive Albums Catalog (Admin + Demo + Synthesized from songs)
+  const albums = useMemo(() => {
+    const albumMap = new Map<string, Album>();
+
+    // Add admin albums
+    adminAlbums.forEach((al) => {
+      const key = `${al.title.trim().toLowerCase()}:::${al.artist.trim().toLowerCase()}`;
+      albumMap.set(key, al);
+    });
+    // Add demo albums
+    demoAlbums.forEach((al) => {
+      const key = `${al.title.trim().toLowerCase()}:::${al.artist.trim().toLowerCase()}`;
+      if (!albumMap.has(key)) albumMap.set(key, al);
+    });
+
+    // Synthesize album entities from tracks
+    tracks.forEach((t) => {
+      if (t.album && t.album !== 'Singles' && !t.album.endsWith(' - Single')) {
+        const key = `${t.album.trim().toLowerCase()}:::${t.artist.trim().toLowerCase()}`;
+        if (!albumMap.has(key)) {
+          const albumTracks = tracks.filter(
+            (track) => track.album?.toLowerCase() === t.album?.toLowerCase()
+          );
+          albumMap.set(key, {
+            id: t.albumId || `alb_${t.album.replace(/\s+/g, '_')}`,
+            title: t.album,
+            artistId: t.artistId || '',
+            artist: t.artist,
+            coverUrl: t.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+            year: t.year || new Date().getFullYear(),
+            genre: t.genre || 'Music',
+            trackCount: albumTracks.length || 1,
+            tracks: albumTracks,
+            description: `Album release by ${t.artist}`,
+          });
+        }
+      }
+    });
+
+    return Array.from(albumMap.values());
+  }, [adminAlbums, tracks]);
 
   const {
     recentSearches,
@@ -68,18 +159,12 @@ export default function Search() {
 
   useEffect(() => {
     let isMounted = true;
-
     const loadPublicPlaylists = async () => {
-      if (!isFirebaseConfigured()) {
-        if (isMounted) setFirestorePublicPlaylists([]);
-        return;
-      }
-
       try {
         const publicPlaylists = await fetchPublicPlaylistsFromFirestore();
-        if (isMounted) setFirestorePublicPlaylists(publicPlaylists);
+        if (isMounted) setRemotePublicPlaylists(publicPlaylists);
       } catch {
-        if (isMounted) setFirestorePublicPlaylists([]);
+        if (isMounted) setRemotePublicPlaylists([]);
       }
     };
 
@@ -89,16 +174,41 @@ export default function Search() {
     };
   }, []);
 
-  // Public playlists should be searchable across demo and user-created content.
+  // 4. Playlists (User + Demo + Public)
   const publicPlaylists = useMemo(() => {
     const seen = new Set<string>();
-    return [...playlists, ...userPlaylists, ...firestorePublicPlaylists].filter((playlist) => {
-      if (!playlist.isPublic) return false;
+    return [...demoPlaylists, ...userPlaylists, ...remotePublicPlaylists].filter((playlist) => {
       if (seen.has(playlist.id)) return false;
       seen.add(playlist.id);
       return true;
     });
-  }, [userPlaylists, firestorePublicPlaylists]);
+  }, [userPlaylists, remotePublicPlaylists]);
+
+  // 5. Genres Catalog (Demo + Dynamic genres from tracks)
+  const allGenres = useMemo(() => {
+    const genreMap = new Map<string, Genre>();
+    demoGenres.forEach((g) => genreMap.set(g.name.toLowerCase(), g));
+
+    const genreColors = ['#8B5CF6', '#EC4899', '#3B82F6', '#10B981', '#F59E0B', '#6366F1', '#14B8A6'];
+    let colorIdx = 0;
+
+    tracks.forEach((t) => {
+      if (t.genre) {
+        const gKey = t.genre.trim().toLowerCase();
+        if (gKey && !genreMap.has(gKey)) {
+          genreMap.set(gKey, {
+            id: `genre_${gKey}`,
+            name: t.genre.trim(),
+            imageUrl: t.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+            color: genreColors[colorIdx % genreColors.length],
+          });
+          colorIdx++;
+        }
+      }
+    });
+
+    return Array.from(genreMap.values());
+  }, [tracks]);
 
   // Keep query in sync with URL param if it changes
   useEffect(() => {
@@ -135,28 +245,28 @@ export default function Search() {
       if (t.title.toLowerCase().includes(q) && !results.includes(t.title)) results.push(t.title);
       if (t.artist.toLowerCase().includes(q) && !results.includes(t.artist)) results.push(t.artist);
     });
+    artists.forEach((a) => {
+      if (a.name.toLowerCase().includes(q) && !results.includes(a.name)) results.push(a.name);
+    });
     albums.forEach((a) => {
       if (a.title.toLowerCase().includes(q) && !results.includes(a.title)) results.push(a.title);
     });
     publicPlaylists.forEach((p) => {
       if (p.title.toLowerCase().includes(q) && !results.includes(p.title)) results.push(p.title);
     });
+    allGenres.forEach((g) => {
+      if (g.name.toLowerCase().includes(q) && !results.includes(g.name)) results.push(g.name);
+    });
 
     return results.slice(0, 6);
-  }, [query, tracks, publicPlaylists]);
+  }, [query, tracks, artists, albums, publicPlaylists, allGenres]);
 
   // Filtered search items across all collections
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
 
-    const matchedTracks = tracks.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.artist.toLowerCase().includes(q) ||
-        t.album.toLowerCase().includes(q) ||
-        t.genre.toLowerCase().includes(q)
-    );
+    const matchedTracks = tracks.filter((t) => matchSongSearch(t, q));
 
     const matchedArtists = artists.filter(
       (a) =>
@@ -177,7 +287,7 @@ export default function Search() {
         (p.description || '').toLowerCase().includes(q)
     );
 
-    const matchedGenres = genres.filter((g) => g.name.toLowerCase().includes(q));
+    const matchedGenres = allGenres.filter((g) => g.name.toLowerCase().includes(q));
 
     const totalMatches =
       matchedTracks.length +
@@ -194,7 +304,16 @@ export default function Search() {
       genres: matchedGenres,
       totalMatches,
     };
-  }, [query, tracks, publicPlaylists]);
+  }, [query, tracks, artists, albums, publicPlaylists, allGenres]);
+
+  const filterTabs = [
+    { label: 'All', value: 'all' as SearchFilter, icon: Filter, count: searchResults?.totalMatches || 0 },
+    { label: 'Songs', value: 'songs' as SearchFilter, icon: Music, count: searchResults?.tracks.length || 0 },
+    { label: 'Artists', value: 'artists' as SearchFilter, icon: User, count: searchResults?.artists.length || 0 },
+    { label: 'Albums', value: 'albums' as SearchFilter, icon: Disc, count: searchResults?.albums.length || 0 },
+    { label: 'Playlists', value: 'playlists' as SearchFilter, icon: ListMusic, count: searchResults?.playlists.length || 0 },
+    { label: 'Genres', value: 'genres' as SearchFilter, icon: Compass, count: searchResults?.genres.length || 0 },
+  ];
 
   return (
     <div className="px-6 py-6 space-y-8 max-w-7xl mx-auto">
@@ -219,14 +338,14 @@ export default function Search() {
                 handleExecuteSearch(query);
               }
             }}
-            placeholder="Search songs, artists, albums, playlists, or genres..."
+            placeholder="Search songs, artists, albums, playlists, genres, or audio files..."
             autoFocus
             className="w-full bg-[#111120] border border-white/10 focus:border-violet-500/60 rounded-2xl pl-12 pr-12 py-4 text-white text-base placeholder:text-white/30 outline-none transition-all shadow-xl shadow-black/40 focus:ring-2 focus:ring-violet-500/20"
           />
           {query && (
             <button
               onClick={() => handleQueryChange('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -250,7 +369,7 @@ export default function Search() {
                 <button
                   key={idx}
                   onMouseDown={() => handleExecuteSearch(s)}
-                  className="w-full text-left px-3.5 py-2 rounded-xl text-sm text-white/80 hover:text-white hover:bg-violet-600/20 flex items-center gap-2.5 transition-colors"
+                  className="w-full text-left px-3.5 py-2 rounded-xl text-sm text-white/80 hover:text-white hover:bg-violet-600/20 flex items-center gap-2.5 transition-colors cursor-pointer"
                 >
                   <SearchIcon size={14} className="text-white/40" />
                   <span>{s}</span>
@@ -272,14 +391,17 @@ export default function Search() {
                 key={tab.value}
                 onClick={() => setSelectedFilter(tab.value)}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 border',
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 border cursor-pointer',
                   isSelected
                     ? 'bg-violet-600 border-violet-500 text-white shadow-lg shadow-violet-600/30'
                     : 'bg-white/5 border-white/8 text-white/60 hover:text-white hover:bg-white/10'
                 )}
               >
                 <Icon size={13} />
-                {tab.label}
+                <span>{tab.label}</span>
+                <span className={cn('px-1.5 py-0.2 rounded-full text-[10px] font-mono', isSelected ? 'bg-white/20' : 'bg-white/5')}>
+                  {tab.count}
+                </span>
               </button>
             );
           })}
@@ -307,7 +429,7 @@ export default function Search() {
                   </div>
                   <button
                     onClick={clearRecentSearches}
-                    className="text-xs text-white/40 hover:text-red-400 transition-colors"
+                    className="text-xs text-white/40 hover:text-red-400 transition-colors cursor-pointer"
                   >
                     Clear history
                   </button>
@@ -320,7 +442,7 @@ export default function Search() {
                     >
                       <button
                         onClick={() => handleExecuteSearch(term)}
-                        className="flex items-center gap-2 mr-2"
+                        className="flex items-center gap-2 mr-2 cursor-pointer"
                       >
                         <Clock size={13} className="text-white/40 group-hover:text-violet-400 transition-colors" />
                         <span>{term}</span>
@@ -330,7 +452,7 @@ export default function Search() {
                           e.stopPropagation();
                           removeRecentSearch(term);
                         }}
-                        className="p-1 rounded-md text-white/30 hover:text-red-400 hover:bg-white/10 transition-colors"
+                        className="p-1 rounded-md text-white/30 hover:text-red-400 hover:bg-white/10 transition-colors cursor-pointer"
                         title="Remove"
                       >
                         <X size={12} />
@@ -352,7 +474,7 @@ export default function Search() {
                   <button
                     key={term}
                     onClick={() => handleExecuteSearch(term)}
-                    className="flex items-center gap-2 bg-gradient-to-r from-violet-900/30 to-pink-900/20 hover:from-violet-800/40 hover:to-pink-800/30 border border-violet-500/20 hover:border-violet-500/40 rounded-xl px-4 py-2 text-sm text-white/80 hover:text-white transition-all shadow-sm"
+                    className="flex items-center gap-2 bg-gradient-to-r from-violet-900/30 to-pink-900/20 hover:from-violet-800/40 hover:to-pink-800/30 border border-violet-500/20 hover:border-violet-500/40 rounded-xl px-4 py-2 text-sm text-white/80 hover:text-white transition-all shadow-sm cursor-pointer"
                   >
                     <Sparkles size={13} className="text-pink-400" />
                     <span>{term}</span>
@@ -368,7 +490,7 @@ export default function Search() {
                 <h2 className="font-display text-lg font-bold text-white">Browse Genres & Moods</h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {genres.map((genre) => (
+                {allGenres.map((genre) => (
                   <motion.button
                     key={genre.id}
                     whileHover={{ scale: 1.02, y: -2 }}
@@ -408,14 +530,14 @@ export default function Search() {
             </div>
             <h3 className="text-xl font-bold text-white mb-2">No results for "{query}"</h3>
             <p className="text-sm text-white/50 leading-relaxed mb-6">
-              Please check your spelling, try shorter keywords, or search for an artist, album, or genre like "Electronic" or "Aurora".
+              Please check your spelling, try searching for an artist like "Anirudh", an album title, or a genre like "Tamil" or "Electronic".
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {['Aurora Nights', 'Neon Horizon', 'Pop', 'Alternative'].map((suggestion) => (
+              {['Anirudh', 'Tamil', 'Electronic', 'Synthwave'].map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => handleExecuteSearch(suggestion)}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-violet-600/30 text-xs font-medium text-white/70 hover:text-violet-300 border border-white/10 transition-all"
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-violet-600/30 text-xs font-medium text-white/70 hover:text-violet-300 border border-white/10 transition-all cursor-pointer"
                 >
                   Try "{suggestion}"
                 </button>
@@ -432,93 +554,113 @@ export default function Search() {
             className="space-y-10"
           >
             {/* Top Song / Songs Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'songs') && searchResults.tracks.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                    <Music size={18} className="text-violet-400" />
-                    Songs
-                    <span className="text-xs font-normal text-white/40">({searchResults.tracks.length})</span>
-                  </h2>
-                </div>
-                <div className="glass rounded-2xl border border-white/5 overflow-visible divide-y divide-white/5">
-                  {searchResults.tracks.map((track, i) => (
-                    <MusicCard key={track.id} track={track} index={i} showIndex />
-                  ))}
-                </div>
-              </section>
+            {(selectedFilter === 'all' || selectedFilter === 'songs') && (
+              searchResults.tracks.length > 0 ? (
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
+                      <Music size={18} className="text-violet-400" />
+                      Songs
+                      <span className="text-xs font-normal text-white/40">({searchResults.tracks.length})</span>
+                    </h2>
+                  </div>
+                  <div className="glass rounded-2xl border border-white/5 overflow-visible divide-y divide-white/5">
+                    {searchResults.tracks.map((track, i) => (
+                      <MusicCard key={track.id} track={track} index={i} showIndex />
+                    ))}
+                  </div>
+                </section>
+              ) : selectedFilter === 'songs' ? (
+                <div className="p-8 text-center text-white/40 text-sm">No songs match "{query}"</div>
+              ) : null
             )}
 
             {/* Artists Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'artists') && searchResults.artists.length > 0 && (
-              <section>
-                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <User size={18} className="text-pink-400" />
-                  Artists
-                  <span className="text-xs font-normal text-white/40">({searchResults.artists.length})</span>
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {searchResults.artists.map((artist) => (
-                    <ArtistCard key={artist.id} artist={artist} />
-                  ))}
-                </div>
-              </section>
+            {(selectedFilter === 'all' || selectedFilter === 'artists') && (
+              searchResults.artists.length > 0 ? (
+                <section>
+                  <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <User size={18} className="text-pink-400" />
+                    Artists
+                    <span className="text-xs font-normal text-white/40">({searchResults.artists.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    {searchResults.artists.map((artist) => (
+                      <ArtistCard key={artist.id} artist={artist} />
+                    ))}
+                  </div>
+                </section>
+              ) : selectedFilter === 'artists' ? (
+                <div className="p-8 text-center text-white/40 text-sm">No artists match "{query}"</div>
+              ) : null
             )}
 
             {/* Albums Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'albums') && searchResults.albums.length > 0 && (
-              <section>
-                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Disc size={18} className="text-violet-400" />
-                  Albums
-                  <span className="text-xs font-normal text-white/40">({searchResults.albums.length})</span>
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-                  {searchResults.albums.map((album) => (
-                    <AlbumCard key={album.id} album={album} />
-                  ))}
-                </div>
-              </section>
+            {(selectedFilter === 'all' || selectedFilter === 'albums') && (
+              searchResults.albums.length > 0 ? (
+                <section>
+                  <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Disc size={18} className="text-violet-400" />
+                    Albums
+                    <span className="text-xs font-normal text-white/40">({searchResults.albums.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
+                    {searchResults.albums.map((album) => (
+                      <AlbumCard key={album.id} album={album} />
+                    ))}
+                  </div>
+                </section>
+              ) : selectedFilter === 'albums' ? (
+                <div className="p-8 text-center text-white/40 text-sm">No albums match "{query}"</div>
+              ) : null
             )}
 
             {/* Playlists Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'playlists') && searchResults.playlists.length > 0 && (
-              <section>
-                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <ListMusic size={18} className="text-cyan-400" />
-                  Playlists
-                  <span className="text-xs font-normal text-white/40">({searchResults.playlists.length})</span>
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-                  {searchResults.playlists.map((playlist) => (
-                    <PlaylistCard key={playlist.id} playlist={playlist} />
-                  ))}
-                </div>
-              </section>
+            {(selectedFilter === 'all' || selectedFilter === 'playlists') && (
+              searchResults.playlists.length > 0 ? (
+                <section>
+                  <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <ListMusic size={18} className="text-cyan-400" />
+                    Playlists
+                    <span className="text-xs font-normal text-white/40">({searchResults.playlists.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+                    {searchResults.playlists.map((playlist) => (
+                      <PlaylistCard key={playlist.id} playlist={playlist} />
+                    ))}
+                  </div>
+                </section>
+              ) : selectedFilter === 'playlists' ? (
+                <div className="p-8 text-center text-white/40 text-sm">No playlists match "{query}"</div>
+              ) : null
             )}
 
             {/* Genres Section */}
-            {(selectedFilter === 'all' || selectedFilter === 'genres') && searchResults.genres.length > 0 && (
-              <section>
-                <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Compass size={18} className="text-amber-400" />
-                  Genres
-                  <span className="text-xs font-normal text-white/40">({searchResults.genres.length})</span>
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {searchResults.genres.map((genre) => (
-                    <motion.button
-                      key={genre.id}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={() => handleExecuteSearch(genre.name)}
-                      className="relative rounded-xl overflow-hidden h-24 text-left border border-white/10 p-4 flex flex-col justify-end"
-                      style={{ background: `linear-gradient(135deg, ${genre.color}77, #121222)` }}
-                    >
-                      <span className="font-bold text-white">{genre.name}</span>
-                    </motion.button>
-                  ))}
-                </div>
-              </section>
+            {(selectedFilter === 'all' || selectedFilter === 'genres') && (
+              searchResults.genres.length > 0 ? (
+                <section>
+                  <h2 className="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Compass size={18} className="text-amber-400" />
+                    Genres
+                    <span className="text-xs font-normal text-white/40">({searchResults.genres.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {searchResults.genres.map((genre) => (
+                      <motion.button
+                        key={genre.id}
+                        whileHover={{ scale: 1.02 }}
+                        onClick={() => handleExecuteSearch(genre.name)}
+                        className="relative rounded-xl overflow-hidden h-24 text-left border border-white/10 p-4 flex flex-col justify-end cursor-pointer"
+                        style={{ background: `linear-gradient(135deg, ${genre.color}77, #121222)` }}
+                      >
+                        <span className="font-bold text-white">{genre.name}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+                </section>
+              ) : selectedFilter === 'genres' ? (
+                <div className="p-8 text-center text-white/40 text-sm">No genres match "{query}"</div>
+              ) : null
             )}
           </motion.div>
         )}

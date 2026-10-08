@@ -23,6 +23,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const navItems: { tab: AdminTab; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
     { tab: 'songs', label: 'Songs', icon: Music },
+    { tab: 'import', label: 'Import Music', icon: UploadCloud },
     { tab: 'artists', label: 'Artists', icon: Mic2 },
     { tab: 'albums', label: 'Albums', icon: Disc },
     { tab: 'users', label: 'Users', icon: Users },

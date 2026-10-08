@@ -29,23 +29,48 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 -- 2. songs ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.songs (
-  id           TEXT        PRIMARY KEY,
-  title        TEXT        NOT NULL,
-  artist       TEXT        NOT NULL DEFAULT '',
-  artist_id    TEXT,
-  album        TEXT        DEFAULT 'Singles',
-  album_id     TEXT        DEFAULT 'al_single',
-  duration     INTEGER     DEFAULT 0,
-  cover_url    TEXT,
-  audio_url    TEXT,
-  lyrics       JSONB       DEFAULT '[]',
-  genre        TEXT        DEFAULT 'Electronic',
-  play_count   INTEGER     DEFAULT 0,
-  year         INTEGER,
-  track_number INTEGER,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                TEXT        PRIMARY KEY,
+  title             TEXT        NOT NULL,
+  artist            TEXT        NOT NULL DEFAULT '',
+  artist_id         TEXT,
+  album             TEXT        DEFAULT 'Singles',
+  album_id          TEXT        DEFAULT 'al_single',
+  duration          INTEGER     DEFAULT 0,
+  cover_url         TEXT,
+  audio_url         TEXT,
+  lyrics            JSONB       DEFAULT '[]',
+  genre             TEXT        DEFAULT 'Tamil',
+  play_count        INTEGER     DEFAULT 0,
+  year              INTEGER,
+  track_number      INTEGER,
+  disc_number       INTEGER,
+  album_artist      TEXT,
+  composer          TEXT,
+  bitrate           INTEGER,
+  file_name         TEXT,
+  original_filename TEXT,
+  file_size         BIGINT,
+  mime_type         TEXT,
+  metadata_source   TEXT,
+  artwork_source    TEXT,
+  artists           TEXT[]      DEFAULT '{}',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration for existing databases
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS disc_number INTEGER;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS album_artist TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS composer TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS bitrate INTEGER;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS file_name TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS original_filename TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS file_size BIGINT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS mime_type TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS metadata_source TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS artwork_source TEXT;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS artists TEXT[] DEFAULT '{}';
+
 
 -- 3. artists ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.artists (

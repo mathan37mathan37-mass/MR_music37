@@ -593,11 +593,22 @@ function songRowToTrack(row: any): Track {
     liked: false,
     year: row.year ?? new Date().getFullYear(),
     trackNumber: row.track_number ?? undefined,
+    albumArtist: row.album_artist ?? undefined,
+    composer: row.composer ?? undefined,
+    discNumber: row.disc_number ?? undefined,
+    bitrate: row.bitrate ?? undefined,
+    fileName: row.file_name ?? undefined,
+    originalFileName: row.original_filename ?? undefined,
+    fileSize: row.file_size ?? undefined,
+    mimeType: row.mime_type ?? undefined,
+    metadataSource: row.metadata_source ?? undefined,
+    artworkSource: row.artwork_source ?? undefined,
+    artists: Array.isArray(row.artists) ? row.artists : (row.artist ? [row.artist] : []),
   };
 }
 
 function trackToSongRow(song: Track) {
-  return {
+  const row: Record<string, any> = {
     id: song.id,
     title: song.title,
     artist: song.artist,
@@ -614,6 +625,20 @@ function trackToSongRow(song: Track) {
     track_number: song.trackNumber ?? null,
     updated_at: new Date().toISOString(),
   };
+
+  if (song.albumArtist) row.album_artist = song.albumArtist;
+  if (song.composer) row.composer = song.composer;
+  if (song.discNumber) row.disc_number = song.discNumber;
+  if (song.bitrate) row.bitrate = song.bitrate;
+  if (song.fileName) row.file_name = song.fileName;
+  if (song.originalFileName) row.original_filename = song.originalFileName;
+  if (song.fileSize) row.file_size = song.fileSize;
+  if (song.mimeType) row.mime_type = song.mimeType;
+  if (song.metadataSource) row.metadata_source = song.metadataSource;
+  if (song.artworkSource) row.artwork_source = song.artworkSource;
+  if (song.artists && song.artists.length > 0) row.artists = song.artists;
+
+  return row;
 }
 
 export async function fetchAllSongsFromFirestore(): Promise<Track[]> {

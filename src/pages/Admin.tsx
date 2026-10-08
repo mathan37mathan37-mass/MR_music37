@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { AdminOverview } from '@/components/admin/AdminOverview';
 import { SongManager } from '@/components/admin/SongManager';
+import { BulkFolderImport } from '@/components/admin/BulkFolderImport';
 import { ArtistManager } from '@/components/admin/ArtistManager';
 import { AlbumManager } from '@/components/admin/AlbumManager';
 import { UserManager } from '@/components/admin/UserManager';
@@ -39,6 +40,10 @@ export default function Admin() {
           isCreateOpen={openCreateSong}
           onCloseCreate={() => setOpenCreateSong(false)}
         />
+      )}
+
+      {(activeTab === 'import' || activeTab === 'uploads') && (
+        <BulkFolderImport onFinish={() => setActiveTab('songs')} />
       )}
 
       {activeTab === 'artists' && (

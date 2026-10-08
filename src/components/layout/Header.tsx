@@ -4,11 +4,13 @@ import { motion } from 'framer-motion';
 import { useUIStore } from '@/store/uiStore';
 import { useAnalyticsStore } from '@/store/analyticsStore';
 import { useAuthStore } from '@/store/authStore';
+import { useAdmin } from '@/hooks/useAdmin';
 
 export function Header() {
   const navigate = useNavigate();
   const currentStreakDays = useAnalyticsStore((s) => s.currentStreakDays);
   const { user, openAuthModal } = useAuthStore();
+  const { isAdmin } = useAdmin();
 
   return (
     <header className="hidden md:flex items-center gap-4 px-6 py-4 flex-shrink-0">
@@ -58,15 +60,17 @@ export function Header() {
 
       {/* Right actions */}
       <div className="flex items-center gap-3">
-        {/* Admin Portal Link */}
-        <Link
-          to="/admin"
-          className="h-9 px-3 rounded-xl bg-violet-600/15 hover:bg-violet-600/25 border border-violet-500/30 flex items-center gap-1.5 text-xs font-semibold text-violet-300 hover:text-white transition-all shadow-sm"
-          title="Open Admin Portal"
-        >
-          <Shield size={14} className="text-violet-400" />
-          <span className="hidden sm:inline">Admin</span>
-        </Link>
+        {/* Admin Portal Link - Strictly visible only to verified Admins */}
+        {isAdmin && (
+          <Link
+            to="/admin"
+            className="h-9 px-3 rounded-xl bg-violet-600/15 hover:bg-violet-600/25 border border-violet-500/30 flex items-center gap-1.5 text-xs font-semibold text-violet-300 hover:text-white transition-all shadow-sm"
+            title="Open Admin Portal"
+          >
+            <Shield size={14} className="text-violet-400" />
+            <span className="hidden sm:inline">Admin</span>
+          </Link>
+        )}
 
         {/* Analytics & Streak Link */}
         <Link

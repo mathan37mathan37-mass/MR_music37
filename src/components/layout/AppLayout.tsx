@@ -12,6 +12,7 @@ import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { ToastContainer } from '@/components/ui/Toast';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { OfflineIndicator } from '@/components/common/OfflineIndicator';
 import { useAuthStore } from '@/store/authStore';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -104,6 +105,9 @@ export function AppLayout() {
 
       {/* PWA Install Prompt */}
       <InstallPrompt />
+
+      {/* Offline Status Indicator */}
+      <OfflineIndicator />
 
       {/* Toast notifications */}
       <ToastContainer />

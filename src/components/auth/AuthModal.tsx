@@ -192,9 +192,26 @@ export function AuthModal() {
 
             {/* Error Banner */}
             {errorMessage && (
-              <div className="flex items-center gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs mb-4">
-                <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
-                <span>{errorMessage}</span>
+              <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs mb-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{errorMessage}</span>
+                </div>
+                {(errorMessage.toLowerCase().includes('failed to fetch') ||
+                  errorMessage.toLowerCase().includes('supabase') ||
+                  errorMessage.toLowerCase().includes('connect') ||
+                  errorMessage.toLowerCase().includes('network')) && (
+                  <div className="pt-2 border-t border-red-500/20 flex items-center justify-between">
+                    <span className="text-[11px] text-red-200">Want to test right away?</span>
+                    <button
+                      type="button"
+                      onClick={handleDemoSignIn}
+                      className="px-3 py-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-[11px] shadow-sm transition-colors cursor-pointer"
+                    >
+                      Sign In as Demo User
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -11,6 +11,8 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useOfflineSongs } from '@/hooks/useOfflineSongs';
+import { useAdminStore } from '@/store/adminStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import type { Track } from '@/types';
 
 interface MusicCardProps {
@@ -118,10 +120,25 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
     addToast(`Saving "${track.title}" to your device…`, 'success');
   };
 
+  const matchedAlbum = useAdminStore((s) =>
+    s.albums.find((al) => (track.albumId && al.id === track.albumId) || (track.album && al.title.toLowerCase() === track.album.toLowerCase()))
+  );
+  const matchedArtist = useAdminStore((s) =>
+    s.artists.find((ar) => (track.artistId && ar.id === track.artistId) || (track.artist && ar.name.toLowerCase() === track.artist.toLowerCase()))
+  );
+
+  const effectiveCover = getEffectiveCoverUrl(track.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const target = event.currentTarget;
     target.onerror = null;
-    target.src = 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=300&q=80';
+    if (matchedAlbum?.coverUrl && !matchedAlbum.coverUrl.startsWith('blob:') && target.src !== matchedAlbum.coverUrl) {
+      target.src = matchedAlbum.coverUrl;
+    } else if (matchedArtist?.imageUrl && !matchedArtist.imageUrl.startsWith('blob:') && target.src !== matchedArtist.imageUrl) {
+      target.src = matchedArtist.imageUrl;
+    } else {
+      target.src = DEFAULT_MR_MUSIC_COVER;
+    }
   };
 
   return (
@@ -165,7 +182,7 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
       {/* Cover Art */}
       <div className="relative w-11 h-11 flex-shrink-0 rounded-lg overflow-hidden shadow music-card-cover">
         <img
-          src={track.coverUrl}
+          src={effectiveCover}
           alt={track.album}
           loading="lazy"
           decoding="async"

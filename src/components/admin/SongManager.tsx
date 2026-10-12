@@ -683,7 +683,14 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3.5">
                         <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 shadow bg-black/40">
-                          <img src={song.coverUrl || DEFAULT_COVER} alt={song.title} className="w-full h-full object-cover" />
+                          <img
+                            src={song.coverUrl || DEFAULT_COVER}
+                            alt={song.title}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = DEFAULT_COVER;
+                            }}
+                            className="w-full h-full object-cover"
+                          />
                           <button
                             onClick={() => (isCurrent ? togglePlay() : playTrack(song))}
                             className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"

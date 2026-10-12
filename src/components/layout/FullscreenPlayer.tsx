@@ -14,6 +14,8 @@ import { SleepTimerModal } from '@/components/ui/SleepTimerModal';
 import { ShareModal } from '@/components/ui/ShareModal';
 import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
+import { useAdminStore } from '@/store/adminStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 
 export function FullscreenPlayer() {
   const { isFullscreen, setFullscreen, toggleQueue, addToast } = useUIStore();
@@ -25,6 +27,26 @@ export function FullscreenPlayer() {
   } = usePlayerStore();
 
   const isLiked = useLibraryStore((s) => currentTrack ? s.likedSongIds.includes(currentTrack.id) : false);
+
+  const matchedAlbum = useAdminStore((s) =>
+    currentTrack
+      ? s.albums.find(
+          (al) => (currentTrack.albumId && al.id === currentTrack.albumId) ||
+                  (currentTrack.album && al.title.toLowerCase() === currentTrack.album.toLowerCase())
+        )
+      : undefined
+  );
+  const matchedArtist = useAdminStore((s) =>
+    currentTrack
+      ? s.artists.find(
+          (ar) => (currentTrack.artistId && ar.id === currentTrack.artistId) ||
+                  (currentTrack.artist && ar.name.toLowerCase() === currentTrack.artist.toLowerCase())
+        )
+      : undefined
+  );
+  const effectiveCover = currentTrack
+    ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
+    : DEFAULT_MR_MUSIC_COVER;
 
   const [activeTab, setActiveTab] = useState<'artwork' | 'lyrics'>('artwork');
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode | 'off'>('bars');
@@ -272,8 +294,12 @@ export function FullscreenPlayer() {
                     }}
                   >
                     <img
-                      src={currentTrack.coverUrl}
+                      src={effectiveCover}
                       alt={currentTrack.title}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+                      }}
                       className={cn(
                         'w-full h-full object-cover spin-continuous transition-opacity',
                         isPlaying ? 'spin-running' : 'spin-paused'

@@ -854,6 +854,9 @@ export function BulkFolderImport({ onFinish }: BulkFolderImportProps) {
                               <img
                                 src={item.coverUrl || DEFAULT_MR_MUSIC_COVER}
                                 alt={item.title}
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                                }}
                                 className="w-full h-full object-cover"
                               />
                               <button
@@ -1074,6 +1077,9 @@ export function BulkFolderImport({ onFinish }: BulkFolderImportProps) {
                         <img
                           src={item.coverUrl || DEFAULT_MR_MUSIC_COVER}
                           alt={item.title}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                          }}
                           className="w-full h-full object-cover"
                         />
                         <button

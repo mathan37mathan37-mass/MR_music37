@@ -11,6 +11,7 @@
 
 import { useAdminStore } from '@/store/adminStore';
 import { uploadMediaWithProgress } from '@/services/storageService';
+import { compressImageToDataUrl } from '@/services/mediaStorage';
 import { adminSyncSongToFirestore } from '@/services/supabaseService';
 import { fetchArtworkBlob, DEFAULT_MR_MUSIC_COVER } from './artworkService';
 import type { BulkImportItem } from '@/types/admin';
@@ -112,20 +113,19 @@ export async function uploadSingleSong(
     onStageChange?.('uploading_cover', 72);
 
     let finalCoverUrl = item.coverUrl || DEFAULT_MR_MUSIC_COVER;
+    let coverFileToUpload: File | null = null;
 
-    try {
-      let coverFileToUpload: File | null = null;
-
-      if (item.coverFile) {
-        coverFileToUpload = item.coverFile;
-      } else if (item.coverBlob) {
-        coverFileToUpload = new File(
-          [item.coverBlob],
-          `cover_${Date.now()}.jpg`,
-          { type: item.coverBlob.type || 'image/jpeg' }
-        );
-      } else if (item.coverUrl && item.coverUrl.startsWith('http')) {
-        // Try fetching online artwork blob to upload into Supabase Storage
+    if (item.coverFile) {
+      coverFileToUpload = item.coverFile;
+    } else if (item.coverBlob) {
+      coverFileToUpload = new File(
+        [item.coverBlob],
+        `cover_${Date.now()}.jpg`,
+        { type: item.coverBlob.type || 'image/jpeg' }
+      );
+    } else if (item.coverUrl && item.coverUrl.startsWith('http') && !item.coverUrl.startsWith('blob:')) {
+      // Try fetching online artwork blob to upload into Supabase/Firebase Storage
+      try {
         const remoteBlob = await fetchArtworkBlob(item.coverUrl);
         if (remoteBlob) {
           coverFileToUpload = new File(
@@ -134,8 +134,10 @@ export async function uploadSingleSong(
             { type: remoteBlob.type || 'image/jpeg' }
           );
         }
-      }
+      } catch { /* non-blocking */ }
+    }
 
+    try {
       if (coverFileToUpload) {
         finalCoverUrl = await uploadMediaWithProgress(
           `covers/${songId}`,
@@ -152,6 +154,23 @@ export async function uploadSingleSong(
       console.warn(`[songUploadService] Cover upload skipped, using fallback url:`, coverErr);
     }
 
+    // CRITICAL: Ensure finalCoverUrl is NEVER a dead blob: or idb: URL that fails on reload
+    if (!finalCoverUrl || finalCoverUrl.startsWith('blob:') || finalCoverUrl.startsWith('idb:')) {
+      if (coverFileToUpload) {
+        try {
+          finalCoverUrl = await compressImageToDataUrl(coverFileToUpload, 400, 0.82);
+        } catch { /* ignore */ }
+      }
+      if (!finalCoverUrl || finalCoverUrl.startsWith('blob:') || finalCoverUrl.startsWith('idb:')) {
+        const candidate = item.artworkCandidates?.[0]?.url;
+        if (candidate && candidate.startsWith('http')) {
+          finalCoverUrl = candidate;
+        } else {
+          finalCoverUrl = DEFAULT_MR_MUSIC_COVER;
+        }
+      }
+    }
+
     // ── 3. Link Artist & Album ───────────────────────────────────────────────
     onStageChange?.('saving_database', 92);
 
@@ -160,9 +179,19 @@ export async function uploadSingleSong(
       albumTitle: item.album,
       genre: item.genre,
       year: item.year,
-      coverUrl: finalCoverUrl,
+      coverUrl: finalCoverUrl.startsWith('blob:') ? DEFAULT_MR_MUSIC_COVER : finalCoverUrl,
       artists: item.artists,
     });
+
+    // If finalCoverUrl ended up as default placeholder but album has a valid custom cover, inherit it
+    if (
+      (finalCoverUrl === DEFAULT_MR_MUSIC_COVER || !finalCoverUrl) &&
+      album?.coverUrl &&
+      album.coverUrl !== DEFAULT_MR_MUSIC_COVER &&
+      !album.coverUrl.startsWith('blob:')
+    ) {
+      finalCoverUrl = album.coverUrl;
+    }
 
     // ── 4. Construct Track Record ────────────────────────────────────────────
     const trackRecord: Track = {

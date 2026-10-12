@@ -15,6 +15,30 @@ import type { ArtworkCandidate, ArtworkSourceType } from '@/types/admin';
 export const DEFAULT_MR_MUSIC_COVER =
   'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80';
 
+/**
+ * Safely resolves a cover image for a track:
+ * 1. Returns track.coverUrl if valid and not an ephemeral blob: / idb: protocol
+ * 2. Falls back to album's coverUrl if available
+ * 3. Falls back to artist's imageUrl if available
+ * 4. Falls back to DEFAULT_MR_MUSIC_COVER
+ */
+export function getEffectiveCoverUrl(
+  coverUrl?: string,
+  albumCoverUrl?: string,
+  artistImageUrl?: string
+): string {
+  if (coverUrl && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('idb:') && coverUrl.trim().length > 0) {
+    return coverUrl;
+  }
+  if (albumCoverUrl && !albumCoverUrl.startsWith('blob:') && !albumCoverUrl.startsWith('idb:') && albumCoverUrl.trim().length > 0) {
+    return albumCoverUrl;
+  }
+  if (artistImageUrl && !artistImageUrl.startsWith('blob:') && !artistImageUrl.startsWith('idb:') && artistImageUrl.trim().length > 0) {
+    return artistImageUrl;
+  }
+  return DEFAULT_MR_MUSIC_COVER;
+}
+
 // In-memory cache to prevent duplicate online queries for same song/album
 const artworkSearchCache = new Map<string, ArtworkCandidate[]>();
 

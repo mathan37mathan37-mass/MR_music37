@@ -4,6 +4,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useUIStore } from '@/store/uiStore';
 import { formatDuration, formatTimeAgo } from '@/utils/cn';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 
 export default function RecentlyPlayed() {
   const { recentlyPlayed, clearRecentlyPlayed } = useLibraryStore();
@@ -94,7 +95,14 @@ export default function RecentlyPlayed() {
               {/* Song & Artist (with Artwork) */}
               <div className="col-span-4 flex items-center gap-3.5 min-w-0 flex-1">
                 <div className="w-11 h-11 rounded-lg overflow-hidden relative flex-shrink-0 shadow">
-                  <img src={item.track.coverUrl} alt={item.track.title} className="w-full h-full object-cover" />
+                  <img
+                    src={getEffectiveCoverUrl(item.track.coverUrl)}
+                    alt={item.track.title}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                    }}
+                    className="w-full h-full object-cover"
+                  />
                   <div className="md:hidden absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
                     <Play size={16} fill="white" className="text-white ml-0.5" />
                   </div>

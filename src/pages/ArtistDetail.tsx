@@ -13,6 +13,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { useUIStore } from '@/store/uiStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import { formatLargeNumber } from '@/utils/cn';
 
 export default function ArtistDetail() {
@@ -245,7 +246,14 @@ export default function ArtistDetail() {
                 onClick={() => playQueue([track])}
                 className="flex items-center gap-3 p-3 rounded-xl glass border border-white/5 hover:bg-white/5 transition-colors cursor-pointer group"
               >
-                <img src={track.coverUrl} alt={track.title} className="w-12 h-12 rounded-lg object-cover shadow" />
+                <img
+                  src={getEffectiveCoverUrl(track.coverUrl, undefined, artist.imageUrl)}
+                  alt={track.title}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = artist.imageUrl || DEFAULT_MR_MUSIC_COVER;
+                  }}
+                  className="w-12 h-12 rounded-lg object-cover shadow"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white truncate group-hover:text-violet-400 transition-colors">
                     {track.title}

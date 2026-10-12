@@ -226,20 +226,28 @@ export async function uploadMediaWithProgress(
 
   // ── 1. Supabase Storage ──────────────────────────────────────────────────
   if (isSupabaseConfigured()) {
-    // Derive the bucket from the path prefix
-    let bucket: 'songs' | 'covers' | 'avatars' = 'covers';
-    if (path.startsWith('songs') || path.includes('audio')) bucket = 'songs';
-    else if (path.startsWith('avatars') || path.includes('avatar')) bucket = 'avatars';
+    try {
+      // Derive the bucket from the path prefix
+      let bucket: 'songs' | 'covers' | 'avatars' = 'covers';
+      if (path.startsWith('songs') || path.includes('audio')) bucket = 'songs';
+      else if (path.startsWith('avatars') || path.includes('avatar')) bucket = 'avatars';
 
-    return uploadToSupabase(bucket, path, file, options);
+      return await uploadToSupabase(bucket, path, file, options);
+    } catch (err) {
+      console.warn('[uploadMediaWithProgress] Supabase upload failed, trying next fallback:', err);
+    }
   }
 
   // ── 2. Firebase Storage ──────────────────────────────────────────────────
   if (isFirebaseConfigured() && storage) {
-    return runFirebaseUpload(path, file, options);
+    try {
+      return await runFirebaseUpload(path, file, options);
+    } catch (err) {
+      console.warn('[uploadMediaWithProgress] Firebase storage upload failed, falling back to local/compressed:', err);
+    }
   }
 
-  // ── 3. Local IndexedDB fallback ──────────────────────────────────────────
+  // ── 3. Local fallback (Data URL for images, IndexedDB for audio) ─────────
   return runLocalFallback(file, sanitizedName, options);
 }
 

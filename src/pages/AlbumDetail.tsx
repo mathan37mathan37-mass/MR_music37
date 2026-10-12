@@ -82,7 +82,14 @@ export default function AlbumDetail() {
           animate={{ scale: 1, opacity: 1 }}
           className="relative w-52 h-52 sm:w-60 sm:h-60 rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10 flex-shrink-0 z-10"
         >
-          <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover" />
+          <img
+            src={album.coverUrl}
+            alt={album.title}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80';
+            }}
+            className="w-full h-full object-cover"
+          />
         </motion.div>
 
         {/* Album Meta */}

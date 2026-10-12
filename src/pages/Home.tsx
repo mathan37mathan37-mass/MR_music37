@@ -15,6 +15,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useOfflineSongs } from '@/hooks/useOfflineSongs';
 import { getTimeOfDay } from '@/utils/cn';
 import { cn } from '@/utils/cn';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import type { Track } from '@/types';
 
 const container = {
@@ -56,8 +57,18 @@ export default function Home() {
     });
   };
 
-  const { songs: adminSongs, hydrateCatalog } = useAdminStore();
+  const { songs: adminSongs, albums, artists, hydrateCatalog } = useAdminStore();
   const { playCounts, currentStreakDays, totalListeningSeconds } = useAnalyticsStore();
+
+  const resolveTrackCover = (t: Track) => {
+    const matchedAlbum = albums.find(
+      (al) => (t.albumId && al.id === t.albumId) || (t.album && al.title.toLowerCase() === t.album.toLowerCase())
+    );
+    const matchedArtist = artists.find(
+      (ar) => (t.artistId && ar.id === t.artistId) || (t.artist && ar.name.toLowerCase() === t.artist.toLowerCase())
+    );
+    return getEffectiveCoverUrl(t.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+  };
   const { isOnline, wasOffline } = useOnlineStatus();
   const { offlineTracks } = useOfflineSongs();
 
@@ -243,7 +254,15 @@ export default function Home() {
                     )}
                   >
                     <div className="relative w-14 h-14 flex-shrink-0">
-                      <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                      <img
+                        src={resolveTrackCover(track)}
+                        alt={track.title}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+                        }}
+                        className="w-full h-full object-cover"
+                      />
                       {isThisPlaying && (
                         <div className="absolute inset-0 bg-violet-950/60 flex items-center justify-center">
                           <div className="flex items-end gap-0.5 h-3.5">
@@ -343,7 +362,15 @@ export default function Home() {
                 className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
-                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveTrackCover(track)}
+                    alt={track.title}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg">
                       <Play size={16} fill="white" className="ml-0.5" />
@@ -388,7 +415,15 @@ export default function Home() {
                 className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
-                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveTrackCover(track)}
+                    alt={track.title}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-lg">
                       <Play size={16} fill="white" className="ml-0.5" />
@@ -420,7 +455,15 @@ export default function Home() {
                 className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-white/5 transition-all cursor-pointer"
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 shadow">
-                  <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveTrackCover(track)}
+                    alt={track.title}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-lg">
                       <Play size={16} fill="white" className="ml-0.5" />

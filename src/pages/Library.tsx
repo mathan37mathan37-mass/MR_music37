@@ -15,6 +15,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useUIStore } from '@/store/uiStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import { cn, formatDuration, formatTimeAgo, formatLargeNumber } from '@/utils/cn';
 import type { ViewMode, Track } from '@/types';
 
@@ -47,6 +48,11 @@ function SongGridCard({ track, onRemove, removeTooltip, badge }: SongGridCardPro
     addToast(liked ? 'Added to favorites' : 'Removed from favorites', 'success');
   };
 
+  const matchedAlbum = useAdminStore((s) =>
+    s.albums.find((al) => (track.albumId && al.id === track.albumId) || (track.album && al.title.toLowerCase() === track.album.toLowerCase()))
+  );
+  const effectiveCover = getEffectiveCoverUrl(track.coverUrl, matchedAlbum?.coverUrl);
+
   return (
     <div
       onClick={handleCardClick}
@@ -59,11 +65,11 @@ function SongGridCard({ track, onRemove, removeTooltip, badge }: SongGridCardPro
     >
       <div className="relative aspect-square rounded-xl overflow-hidden shadow">
         <img
-          src={track.coverUrl}
+          src={effectiveCover}
           alt={track.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80';
+            (e.target as HTMLImageElement).src = matchedAlbum?.coverUrl || DEFAULT_MR_MUSIC_COVER;
           }}
         />
 
@@ -501,7 +507,14 @@ export default function Library() {
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
                         <div className="w-11 h-11 rounded-lg overflow-hidden relative flex-shrink-0">
-                          <img src={item.track.coverUrl} alt={item.track.title} className="w-full h-full object-cover" />
+                          <img
+                            src={getEffectiveCoverUrl(item.track.coverUrl)}
+                            alt={item.track.title}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                            }}
+                            className="w-full h-full object-cover"
+                          />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                             <Play size={16} fill="white" className="text-white ml-0.5" />
                           </div>

@@ -1,8 +1,9 @@
-﻿import { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { UploadCloud, CheckCircle2, AlertTriangle, FileAudio, Image as ImageIcon, X, RefreshCw } from 'lucide-react';
 import { validateAudioFile, validateImageFile, uploadMediaWithProgress } from '@/services/storageService';
 import { uploadToSupabase, type UploadOptions } from '@/services/supabaseStorageService';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { cn } from '@/utils/cn';
 
 interface FileUploadZoneProps {
@@ -77,13 +78,17 @@ export function FileUploadZone({
         },
       };
 
-      if (storageBackend === 'supabase') {
-        await uploadToSupabase(
-          supabaseBucket ?? (type === 'audio' ? 'songs' : 'covers'),
-          storagePath,
-          selectedFile,
-          uploadOptions
-        );
+      if (storageBackend === 'supabase' && isSupabaseConfigured()) {
+        try {
+          await uploadToSupabase(
+            supabaseBucket ?? (type === 'audio' ? 'songs' : 'covers'),
+            storagePath,
+            selectedFile,
+            uploadOptions
+          );
+        } catch {
+          await uploadMediaWithProgress(storagePath, selectedFile, uploadOptions);
+        }
       } else {
         await uploadMediaWithProgress(storagePath, selectedFile, uploadOptions);
       }

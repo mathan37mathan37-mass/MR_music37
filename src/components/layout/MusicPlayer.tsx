@@ -13,6 +13,8 @@ import { SleepTimerModal } from '@/components/ui/SleepTimerModal';
 import { ShareModal } from '@/components/ui/ShareModal';
 import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
+import { useAdminStore } from '@/store/adminStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 
 function EQBars() {
   return (
@@ -46,6 +48,26 @@ export function MusicPlayer() {
 
   const [isSleepOpen, setIsSleepOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+
+  const matchedAlbum = useAdminStore((s) =>
+    currentTrack
+      ? s.albums.find(
+          (al) => (currentTrack.albumId && al.id === currentTrack.albumId) ||
+                  (currentTrack.album && al.title.toLowerCase() === currentTrack.album.toLowerCase())
+        )
+      : undefined
+  );
+  const matchedArtist = useAdminStore((s) =>
+    currentTrack
+      ? s.artists.find(
+          (ar) => (currentTrack.artistId && ar.id === currentTrack.artistId) ||
+                  (currentTrack.artist && ar.name.toLowerCase() === currentTrack.artist.toLowerCase())
+        )
+      : undefined
+  );
+  const effectiveCover = currentTrack
+    ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
+    : DEFAULT_MR_MUSIC_COVER;
 
   if (!currentTrack) return null;
 
@@ -89,7 +111,15 @@ export function MusicPlayer() {
             transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
             className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-violet-500/30 shadow-md"
           >
-            <img src={currentTrack.coverUrl} alt={currentTrack.album} className="w-full h-full object-cover" />
+            <img
+              src={effectiveCover}
+              alt={currentTrack.album}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+              }}
+              className="w-full h-full object-cover"
+            />
           </motion.div>
           {isPlaying && (
             <div className="absolute -bottom-1 -right-1">

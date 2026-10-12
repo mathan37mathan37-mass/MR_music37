@@ -3,12 +3,34 @@ import { Play, Pause, SkipForward, Heart, ListMusic } from 'lucide-react';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { useAdminStore } from '@/store/adminStore';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import { cn } from '@/utils/cn';
 
 export function MiniPlayer() {
   const { currentTrack, isPlaying, progress, togglePlay, next, toggleLike } = usePlayerStore();
   const isLiked = useLibraryStore((s) => currentTrack ? s.likedSongIds.includes(currentTrack.id) : false);
   const { toggleQueue, toggleFullscreen } = useUIStore();
+
+  const matchedAlbum = useAdminStore((s) =>
+    currentTrack
+      ? s.albums.find(
+          (al) => (currentTrack.albumId && al.id === currentTrack.albumId) ||
+                  (currentTrack.album && al.title.toLowerCase() === currentTrack.album.toLowerCase())
+        )
+      : undefined
+  );
+  const matchedArtist = useAdminStore((s) =>
+    currentTrack
+      ? s.artists.find(
+          (ar) => (currentTrack.artistId && ar.id === currentTrack.artistId) ||
+                  (currentTrack.artist && ar.name.toLowerCase() === currentTrack.artist.toLowerCase())
+        )
+      : undefined
+  );
+  const effectiveCover = currentTrack
+    ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
+    : DEFAULT_MR_MUSIC_COVER;
 
   if (!currentTrack) return null;
 
@@ -34,7 +56,15 @@ export function MiniPlayer() {
           className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 cursor-pointer shadow-md"
           onClick={toggleFullscreen}
         >
-          <img src={currentTrack.coverUrl} alt={currentTrack.album} className="w-full h-full object-cover" />
+          <img
+            src={effectiveCover}
+            alt={currentTrack.album}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
+            }}
+            className="w-full h-full object-cover"
+          />
         </div>
 
         {/* Info */}

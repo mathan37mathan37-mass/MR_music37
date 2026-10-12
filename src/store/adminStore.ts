@@ -27,6 +27,7 @@ import {
   fetchAllUsersFromFirestore,
 } from '@/services/supabaseService';
 import { getAllMediaKeys, getMediaUrl, isBlobUrlAlive } from '@/services/mediaStorage';
+import { DEFAULT_MR_MUSIC_COVER, getEffectiveCoverUrl } from '@/services/artworkService';
 
 const SEED_USERS: ManagedUser[] = [
   {
@@ -677,6 +678,38 @@ if (typeof window !== 'undefined') {
               state.updateSong(song.id, { audioUrl: fallback });
               console.warn(`[AdminStore] Replaced broken idb:// song URL with fallback for "${song.title || 'track'}"`);
             }
+          }
+        }
+      }
+
+      // Auto-heal song cover art if missing, dead blob:, idb://, or placeholder
+      for (const song of state.songs) {
+        const isBrokenCover = !song.coverUrl ||
+          song.coverUrl.startsWith('blob:') ||
+          song.coverUrl.startsWith('idb://') ||
+          song.coverUrl.includes('photo-1516280440614-37939bbacd81') ||
+          song.coverUrl.includes('photo-1514525253161-7a46d19cd819');
+
+        if (isBrokenCover) {
+          const matchedAlbum = state.albums.find(
+            (al) => (song.albumId && al.id === song.albumId) ||
+                    (song.album && al.title.toLowerCase() === song.album.toLowerCase())
+          );
+          const matchedArtist = state.artists.find(
+            (ar) => (song.artistId && ar.id === song.artistId) ||
+                    (song.artist && ar.name.toLowerCase() === song.artist.toLowerCase())
+          );
+
+          const healedCover = getEffectiveCoverUrl(
+            song.coverUrl.startsWith('blob:') || song.coverUrl.startsWith('idb://') ? undefined : song.coverUrl,
+            matchedAlbum?.coverUrl,
+            matchedArtist?.imageUrl
+          );
+
+          if (healedCover && healedCover !== song.coverUrl) {
+            state.updateSong(song.id, { coverUrl: healedCover });
+            adminSyncSongToFirestore({ ...song, coverUrl: healedCover });
+            console.log(`[AdminStore] Healed cover art for "${song.title}":`, healedCover);
           }
         }
       }

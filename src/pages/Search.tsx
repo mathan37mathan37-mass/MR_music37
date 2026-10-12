@@ -68,11 +68,12 @@ export default function Search() {
     tracks.forEach((t) => {
       const mainArtist = t.artist.trim();
       const mainKey = mainArtist.toLowerCase();
+      const safeTrackCover = (!t.coverUrl?.startsWith('blob:') && !t.coverUrl?.startsWith('idb:') && t.coverUrl) || '';
       if (mainArtist && !artistMap.has(mainKey)) {
         artistMap.set(mainKey, {
           id: t.artistId || `art_${mainKey.replace(/\s+/g, '_')}`,
           name: mainArtist,
-          imageUrl: t.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
+          imageUrl: safeTrackCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
           bio: `Official artist profile for ${mainArtist}`,
           genres: [t.genre || 'Music'],
           verified: true,
@@ -91,7 +92,7 @@ export default function Search() {
             artistMap.set(cKey, {
               id: `art_${cKey.replace(/\s+/g, '_')}`,
               name: cName,
-              imageUrl: t.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
+              imageUrl: safeTrackCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80',
               bio: `Artist profile for ${cName}`,
               genres: [t.genre || 'Music'],
               verified: true,
@@ -130,12 +131,13 @@ export default function Search() {
           const albumTracks = tracks.filter(
             (track) => track.album?.toLowerCase() === t.album?.toLowerCase()
           );
+          const safeTrackCover = (!t.coverUrl?.startsWith('blob:') && !t.coverUrl?.startsWith('idb:') && t.coverUrl) || '';
           albumMap.set(key, {
             id: t.albumId || `alb_${t.album.replace(/\s+/g, '_')}`,
             title: t.album,
             artistId: t.artistId || '',
             artist: t.artist,
-            coverUrl: t.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+            coverUrl: safeTrackCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
             year: t.year || new Date().getFullYear(),
             genre: t.genre || 'Music',
             trackCount: albumTracks.length || 1,

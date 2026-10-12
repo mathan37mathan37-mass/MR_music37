@@ -60,15 +60,22 @@ export default function ArtistDetail() {
 
   const isFollowing = useLibraryStore((s) => s.followedArtistIds.includes(artist.id));
 
-  // Artist's tracks
+  // Artist's tracks — includes songs where this artist is primary OR a collaborator
   const artistTracks = useMemo(() => {
-    return allTracks.filter((t) => t.artistId === artist.id);
-  }, [artist.id, allTracks]);
+    const canonicalName = artist.name.toLowerCase();
+    return allTracks.filter((t) => {
+      if (t.artistId === artist.id) return true;
+      // Check collaborators list (individual canonical names stored in artists[])
+      if (Array.isArray(t.artists) && t.artists.some((n) => n.toLowerCase() === canonicalName)) return true;
+      return false;
+    });
+  }, [artist.id, artist.name, allTracks]);
 
-  // Artist's albums
+  // Artist's albums — primary artist albums OR albums containing songs by this artist
   const artistAlbums = useMemo(() => {
-    return allAlbums.filter((al) => al.artistId === artist.id);
-  }, [artist.id, allAlbums]);
+    const albumIdsFromTracks = new Set(artistTracks.map((t) => t.albumId));
+    return allAlbums.filter((al) => al.artistId === artist.id || albumIdsFromTracks.has(al.id));
+  }, [artist.id, artistTracks, allAlbums]);
 
   // Related artists (artists sharing genre)
   const relatedArtists = useMemo(() => {

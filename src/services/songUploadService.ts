@@ -40,16 +40,19 @@ export async function ensureArtistAndAlbum(params: {
 }): Promise<{ artist: Artist; album: Album; collaboratingArtists: Artist[] }> {
   const { artistName, albumTitle, genre, year, coverUrl, artists } = params;
 
-  // 1. Resolve Primary Artist
-  const artist = await resolveOrCreateArtist(artistName, {
+  // ── 1. Parse the raw artist credit into canonical individuals FIRST ──────────
+  // e.g. "Anirudh Ravichander & Shruthika Samudhrala" → primaryArtist: "Anirudh Ravichander"
+  // Use the `artists` array if already pre-split, otherwise parse the raw string.
+  const parsed = parseCollaboratingArtists(artists && artists.length > 0 ? artists : artistName);
+
+  // ── 2. Resolve PRIMARY artist (the canonical single-name record) ─────────────
+  const artist = await resolveOrCreateArtist(parsed.primaryArtist, {
     genre: genre || 'Tamil',
     imageUrl: coverUrl || DEFAULT_MR_MUSIC_COVER,
   });
 
-  // 2. Also resolve any secondary / collaborating artists concurrently
-  const parsed = parseCollaboratingArtists(artists && artists.length > 0 ? artists : artistName);
+  // ── 3. Resolve every collaborating artist (creates new profiles only if needed) ─
   const collaboratingArtists: Artist[] = [artist];
-
   for (const altArtistName of parsed.allArtists) {
     if (cleanDisplayName(altArtistName).toLowerCase() !== artist.name.toLowerCase()) {
       try {
@@ -62,7 +65,7 @@ export async function ensureArtistAndAlbum(params: {
     }
   }
 
-  // 3. Resolve or Create Album linked to Primary Artist
+  // ── 4. Resolve or Create Album linked to Primary Artist ──────────────────────
   const album = await resolveOrCreateAlbum(
     albumTitle || `${artist.name} Singles`,
     artist,
@@ -174,7 +177,7 @@ export async function uploadSingleSong(
     // ── 3. Link Artist & Album ───────────────────────────────────────────────
     onStageChange?.('saving_database', 92);
 
-    const { artist, album } = await ensureArtistAndAlbum({
+    const { artist, album, collaboratingArtists } = await ensureArtistAndAlbum({
       artistName: item.artist,
       albumTitle: item.album,
       genre: item.genre,
@@ -193,10 +196,17 @@ export async function uploadSingleSong(
       finalCoverUrl = album.coverUrl;
     }
 
+    // Build the canonical artists list from resolved collaborator records
+    // This guarantees that even if the raw tag was "Anirudh & Shruthika", we store
+    // the individual resolved names so Artist pages link correctly.
+    const resolvedArtistNames = collaboratingArtists.map((a) => a.name);
+
     // ── 4. Construct Track Record ────────────────────────────────────────────
     const trackRecord: Track = {
       id: songId,
       title: item.title,
+      // `artist` display field uses primary artist's canonical name.
+      // The raw credit string (e.g. "Anirudh & Shruthika") is preserved in `artists[].`
       artist: artist.name,
       artistId: artist.id,
       album: album.title,
@@ -220,7 +230,8 @@ export async function uploadSingleSong(
       mimeType: item.mimeType,
       metadataSource: item.metadataSource,
       artworkSource: item.artworkSource,
-      artists: item.artists && item.artists.length > 0 ? item.artists : [artist.name],
+      // Store all resolved canonical artist names (individual, not combined strings)
+      artists: resolvedArtistNames.length > 0 ? resolvedArtistNames : [artist.name],
     };
 
     // ── 5. Save in Database & Admin Store ────────────────────────────────────

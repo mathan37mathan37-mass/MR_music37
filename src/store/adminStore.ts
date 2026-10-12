@@ -334,6 +334,8 @@ export const useAdminStore = create<AdminState>()(
           genre: formData.genre || 'Electronic',
           playCount: 0,
           liked: false,
+          // Ensure artists array is always set for ArtistDetail collaboration queries
+          artists: artist ? [artist.name] : ['Unknown Artist'],
         };
 
         // Also inject the new song into the album's tracks array so it shows on the Albums page

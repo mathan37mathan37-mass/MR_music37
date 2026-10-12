@@ -279,18 +279,62 @@ export async function deduplicateCatalog(): Promise<DeduplicationReport> {
   };
 
   // ── 1. Deduplicate Artists ────────────────────────────────────────────────
+
+  // Phase 0: Build a lookup of already-canonical single-name artists (normalized)
+  // Then detect "pseudo-artists" — records whose names contain collaboration delimiters
+  // like "Anirudh Ravichander & Shruthika Samudhrala" — and remap them to the
+  // primary individual artist if one already exists.
+  const COLLAB_SPLIT_RE = /\s*(?:;|feat\.?|ft\.?|featuring|with|&|\/|\|)\s*/i;
+
+  // First pass: collect all artists that appear to be single-name canonical records
+  const canonicalByNormName = new Map<string, Artist>();
+  for (const a of store.artists) {
+    if (!COLLAB_SPLIT_RE.test(a.name)) {
+      const nk = normalizeIdentityKey(a.name);
+      if (!canonicalByNormName.has(nk)) {
+        canonicalByNormName.set(nk, a);
+      } else {
+        // Prefer verified, or the one with more data
+        const existing = canonicalByNormName.get(nk)!;
+        if (!existing.verified && a.verified) {
+          canonicalByNormName.set(nk, a);
+        }
+      }
+    }
+  }
+
+  // Second pass: for pseudo-artists (collab strings), remap to primary canonical
+  const artistIdRemap = new Map<string, string>();
+  const deletedArtistIds: string[] = [];
+  const consolidatedArtists: Artist[] = [];
+
+  for (const a of store.artists) {
+    if (COLLAB_SPLIT_RE.test(a.name)) {
+      // This artist record is a collaboration string. Find the primary canonical.
+      const parts = parseCollaboratingArtists(a.name);
+      const primaryNorm = normalizeIdentityKey(parts.primaryArtist);
+      const canonicalPrimary = canonicalByNormName.get(primaryNorm);
+      if (canonicalPrimary && canonicalPrimary.id !== a.id) {
+        artistIdRemap.set(a.id, canonicalPrimary.id);
+        deletedArtistIds.push(a.id);
+        report.duplicateArtistsFound++;
+      } else {
+        // No canonical found; keep as-is but don't treat as canonical
+        consolidatedArtists.push(a);
+      }
+    }
+  }
+
+  // Third pass: standard normalization deduplication for non-collab artists
   const artistGroups = new Map<string, Artist[]>();
   for (const a of store.artists) {
+    if (artistIdRemap.has(a.id)) continue; // already remapped/deleted
     const key = normalizeIdentityKey(a.name);
     if (!artistGroups.has(key)) {
       artistGroups.set(key, []);
     }
     artistGroups.get(key)!.push(a);
   }
-
-  const artistIdRemap = new Map<string, string>();
-  const consolidatedArtists: Artist[] = [];
-  const deletedArtistIds: string[] = [];
 
   for (const [, group] of artistGroups.entries()) {
     if (group.length === 1) {

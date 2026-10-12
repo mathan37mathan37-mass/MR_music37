@@ -4,6 +4,10 @@ import { UserCheck } from 'lucide-react';
 import { ArtistCard } from '@/components/ui/ArtistCard';
 import { artists as demoArtists } from '@/data/demo';
 import { useAdminStore } from '@/store/adminStore';
+import { normalizeIdentityKey } from '@/services/musicIdentityService';
+
+// Collaboration-string delimiters — names containing these are pseudo-artists, not canonical
+const COLLAB_PATTERN = /\s*(?:&|\bfeat\.?|ft\.?\b|featuring|\bwith\b|;|\/|\|)\s*/i;
 
 export default function Artists() {
   const navigate = useNavigate();
@@ -11,10 +15,21 @@ export default function Artists() {
 
   const allArtists = useMemo(() => {
     const combined = [...adminArtists, ...demoArtists];
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
     return combined.filter((a) => {
-      if (seen.has(a.id)) return false;
-      seen.add(a.id);
+      if (seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+
+      // Filter out pseudo-artists created from raw collaboration strings
+      // e.g. "Anirudh Ravichander & Shruthika Samudhrala" — these have '&' in their name
+      if (COLLAB_PATTERN.test(a.name)) return false;
+
+      // Deduplicate by normalized name (handles capitalization / spacing differences)
+      const normName = normalizeIdentityKey(a.name);
+      if (seenNames.has(normName)) return false;
+      seenNames.add(normName);
+
       return true;
     });
   }, [adminArtists]);

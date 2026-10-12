@@ -15,7 +15,8 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { useUIStore } from '@/store/uiStore';
-import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER, normalizeMediaUrl } from '@/services/artworkService';
+import { TrackCoverImage } from '@/components/ui/TrackCoverImage';
 import { cn, formatDuration, formatTimeAgo, formatLargeNumber } from '@/utils/cn';
 import type { ViewMode, Track } from '@/types';
 
@@ -64,13 +65,10 @@ function SongGridCard({ track, onRemove, removeTooltip, badge }: SongGridCardPro
       )}
     >
       <div className="relative aspect-square rounded-xl overflow-hidden shadow">
-        <img
+        <TrackCoverImage
           src={effectiveCover}
           alt={track.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = matchedAlbum?.coverUrl || DEFAULT_MR_MUSIC_COVER;
-          }}
         />
 
         {/* Playing EQ or Play Hover */}
@@ -507,12 +505,9 @@ export default function Library() {
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
                         <div className="w-11 h-11 rounded-lg overflow-hidden relative flex-shrink-0">
-                          <img
+                          <TrackCoverImage
                             src={getEffectiveCoverUrl(item.track.coverUrl)}
                             alt={item.track.title}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
-                            }}
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -571,7 +566,9 @@ export default function Library() {
                       className="flex items-center justify-between p-3 glass rounded-xl border border-white/5 hover:bg-white/5 transition-colors cursor-pointer group"
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
-                        <img src={album.coverUrl} alt={album.title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 shadow" />
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 shadow">
+                          <TrackCoverImage src={album.coverUrl} alt={album.title} className="w-full h-full object-cover" />
+                        </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate group-hover:text-violet-400 transition-colors">{album.title}</p>
                           <p className="text-xs text-white/50 truncate">{album.artist} • {album.year}</p>
@@ -616,7 +613,17 @@ export default function Library() {
                       <div className="flex items-center gap-3.5 min-w-0">
                         <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ background: `linear-gradient(135deg, ${pl.coverColors?.[0]}, ${pl.coverColors?.[1]})` }}>
                           <div className="w-full h-full grid grid-cols-2">
-                            {pl.tracks.slice(0, 4).map((t, i) => <img key={i} src={t.coverUrl} alt="" className="w-full h-full object-cover" />)}
+                            {pl.tracks.slice(0, 4).map((t, i) => (
+                              <img
+                                key={i}
+                                src={normalizeMediaUrl(t.coverUrl) || DEFAULT_MR_MUSIC_COVER}
+                                alt=""
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                                }}
+                                className="w-full h-full object-cover"
+                              />
+                            ))}
                           </div>
                         </div>
                         <div className="min-w-0">

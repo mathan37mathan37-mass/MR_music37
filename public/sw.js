@@ -1,4 +1,4 @@
-const CACHE_NAME = 'melodix-v2-theme-fix';
+const CACHE_NAME = 'melodix-v3-image-proxy-fix';
 const BASE_PATH = self.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '');
 const OFFLINE_URL = new URL('./offline.html', self.location.href).toString();
 
@@ -39,8 +39,14 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and cross-origin requests
   if (request.method !== 'GET' || url.origin !== location.origin) return;
 
-  // Audio files — network only (too large to cache meaningfully)
-  if (url.pathname.includes('/audio/')) return;
+  // Supabase proxy, API calls & audio files — network only
+  if (
+    url.pathname.includes('/audio/') ||
+    url.pathname.startsWith('/supabase-storage/') ||
+    url.pathname.startsWith('/api/')
+  ) {
+    return;
+  }
 
   // Navigation requests — network-first with offline fallback
   if (request.mode === 'navigate') {

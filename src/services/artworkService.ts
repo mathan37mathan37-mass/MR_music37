@@ -16,6 +16,21 @@ export const DEFAULT_MR_MUSIC_COVER =
   'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80';
 
 /**
+ * Normalizes Supabase Storage URLs to use the same-origin `/supabase-storage/` reverse proxy.
+ * This completely prevents QUIC protocol errors (ERR_QUIC_PROTOCOL_ERROR.QUIC_NETWORK_IDLE_TIMEOUT)
+ * on Vercel deployments and localhost.
+ */
+export function normalizeMediaUrl(url?: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  const match = trimmed.match(/^https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/(.+)$/);
+  if (match) {
+    return `/supabase-storage/${match[1]}`;
+  }
+  return trimmed;
+}
+
+/**
  * Safely resolves a cover image for a track:
  * 1. Returns track.coverUrl if valid and not an ephemeral blob: / idb: protocol
  * 2. Falls back to album's coverUrl if available
@@ -28,13 +43,13 @@ export function getEffectiveCoverUrl(
   artistImageUrl?: string
 ): string {
   if (coverUrl && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('idb:') && coverUrl.trim().length > 0) {
-    return coverUrl;
+    return normalizeMediaUrl(coverUrl);
   }
   if (albumCoverUrl && !albumCoverUrl.startsWith('blob:') && !albumCoverUrl.startsWith('idb:') && albumCoverUrl.trim().length > 0) {
-    return albumCoverUrl;
+    return normalizeMediaUrl(albumCoverUrl);
   }
   if (artistImageUrl && !artistImageUrl.startsWith('blob:') && !artistImageUrl.startsWith('idb:') && artistImageUrl.trim().length > 0) {
-    return artistImageUrl;
+    return normalizeMediaUrl(artistImageUrl);
   }
   return DEFAULT_MR_MUSIC_COVER;
 }

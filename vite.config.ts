@@ -22,4 +22,13 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,
   },
+  server: {
+    proxy: {
+      '/supabase-storage': {
+        target: 'https://fcxspskofubbmqtyqlrw.supabase.co/storage/v1/object/public',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/supabase-storage/, ''),
+      },
+    },
+  },
 })

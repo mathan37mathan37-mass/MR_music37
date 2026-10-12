@@ -9,6 +9,7 @@ import { FileUploadZone } from './FileUploadZone';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Album } from '@/types';
 import type { AlbumFormData } from '@/types/admin';
+import { DEFAULT_MR_MUSIC_COVER, normalizeMediaUrl } from '@/services/artworkService';
 
 interface AlbumManagerProps {
   isCreateOpen?: boolean;
@@ -325,7 +326,14 @@ export function AlbumManager({ isCreateOpen = false, onCloseCreate }: AlbumManag
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <img src={track.coverUrl} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                            <img
+                              src={normalizeMediaUrl(track.coverUrl) || DEFAULT_MR_MUSIC_COVER}
+                              alt=""
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                              }}
+                              className="w-7 h-7 rounded-lg object-cover"
+                            />
                             <div className="truncate">
                               <p className={`font-semibold truncate ${isSelected ? 'text-amber-300' : 'text-white'}`}>
                                 {track.title}

@@ -12,6 +12,7 @@ import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAdminStore } from '@/store/adminStore';
 import { tracks as allTracks, artists as allArtists } from '@/data/demo';
+import { TrackCoverImage } from '@/components/ui/TrackCoverImage';
 import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 
@@ -407,7 +408,7 @@ export default function Stats() {
                   </span>
 
                   <div className="relative w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 shadow">
-                    <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                    <TrackCoverImage src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
                     <button
                       onClick={() => playTrack(track)}
                       className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"

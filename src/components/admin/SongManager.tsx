@@ -21,6 +21,7 @@ import { uploadSongAudio, uploadSongCover } from '@/services/supabaseStorageServ
 import { formatDuration, cn } from '@/utils/cn';
 import { matchSongSearch } from '@/utils/searchUtils';
 import { deduplicateCatalog } from '@/services/musicIdentityService';
+import { normalizeMediaUrl } from '@/services/artworkService';
 
 const GENRES = [
   'Electronic', 'Synthwave', 'Indie Pop', 'Alternative',
@@ -684,7 +685,7 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
                       <div className="flex items-center gap-3.5">
                         <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 shadow bg-black/40">
                           <img
-                            src={song.coverUrl || DEFAULT_COVER}
+                            src={normalizeMediaUrl(song.coverUrl) || DEFAULT_COVER}
                             alt={song.title}
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = DEFAULT_COVER;

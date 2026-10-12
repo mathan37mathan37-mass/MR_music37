@@ -4,6 +4,7 @@ import {
   X, Share2, Copy, Check, Send, Globe, Music, ListMusic
 } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
+import { DEFAULT_MR_MUSIC_COVER, normalizeMediaUrl } from '@/services/artworkService';
 import type { Track, Playlist } from '@/types';
 
 interface ShareModalProps {
@@ -104,7 +105,14 @@ export function ShareModal({ isOpen, onClose, track, playlist }: ShareModalProps
           {/* Item Preview Card */}
           <div className="flex items-center gap-3.5 p-3.5 mt-5 rounded-2xl bg-white/5 border border-white/5">
             {artwork ? (
-              <img src={artwork} alt="" className="w-14 h-14 rounded-xl object-cover shadow" />
+              <img
+                src={normalizeMediaUrl(artwork)}
+                alt=""
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                }}
+                className="w-14 h-14 rounded-xl object-cover shadow"
+              />
             ) : (
               <div className="w-14 h-14 rounded-xl bg-violet-600/30 flex items-center justify-center text-violet-300">
                 {isSharingTrack ? <Music size={24} /> : <ListMusic size={24} />}

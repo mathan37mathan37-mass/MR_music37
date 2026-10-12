@@ -13,6 +13,7 @@ import { useAdminStore } from '@/store/adminStore';
 import { CreatePlaylistModal } from '@/components/ui/CreatePlaylistModal';
 import { fetchPublicPlaylistsFromFirestore } from '@/services/firestoreService';
 import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { TrackCoverImage } from '@/components/ui/TrackCoverImage';
 import { formatDuration, formatTotalDuration } from '@/utils/cn';
 import type { Playlist } from '@/types';
 
@@ -209,7 +210,7 @@ export default function PlaylistDetail() {
           className="relative w-52 h-52 sm:w-60 sm:h-60 rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10 flex-shrink-0 z-10 group"
         >
           {playlist.coverUrl ? (
-            <img src={playlist.coverUrl} alt={playlist.title} className="w-full h-full object-cover" />
+            <TrackCoverImage src={playlist.coverUrl} alt={playlist.title} className="w-full h-full object-cover" />
           ) : (
             <div
               className="w-full h-full flex items-center justify-center text-5xl"
@@ -395,15 +396,13 @@ export default function PlaylistDetail() {
                     className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <img
-                        src={getEffectiveCoverUrl(track.coverUrl)}
-                        alt={track.title}
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
-                        }}
-                        className="w-9 h-9 rounded-lg object-cover"
-                      />
+                      <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
+                        <TrackCoverImage
+                          src={getEffectiveCoverUrl(track.coverUrl)}
+                          alt={track.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-white truncate">{track.title}</p>
                         <p className="text-[11px] text-white/40 truncate">{track.artist}</p>
@@ -476,13 +475,9 @@ export default function PlaylistDetail() {
 
                 {/* Artwork */}
                 <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 shadow">
-                  <img
+                  <TrackCoverImage
                     src={getEffectiveCoverUrl(track.coverUrl)}
                     alt={track.title}
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
-                    }}
                     className="w-full h-full object-cover"
                   />
                 </div>

@@ -6,6 +6,7 @@ import { formatLargeNumber } from '@/utils/cn';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
+import { DEFAULT_MR_MUSIC_COVER, normalizeMediaUrl } from '@/services/artworkService';
 import type { Playlist } from '@/types';
 
 interface PlaylistCardProps {
@@ -69,7 +70,15 @@ export function PlaylistCard({ playlist, className, size = 'md' }: PlaylistCardP
             {playlist.tracks.length >= 4 ? (
               <div className="grid grid-cols-2 w-full h-full">
                 {playlist.tracks.slice(0, 4).map((t, i) => (
-                  <img key={i} src={t.coverUrl} alt="" className="w-full h-full object-cover" />
+                  <img
+                    key={i}
+                    src={normalizeMediaUrl(t.coverUrl) || DEFAULT_MR_MUSIC_COVER}
+                    alt=""
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = DEFAULT_MR_MUSIC_COVER;
+                    }}
+                    className="w-full h-full object-cover"
+                  />
                 ))}
               </div>
             ) : (

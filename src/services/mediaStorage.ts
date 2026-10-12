@@ -1,5 +1,6 @@
 import { getOfflineTrackAudioUrl } from './downloadService';
 import { getOfflineAudioUrl } from './offlineStorageService';
+import { normalizeMediaUrl } from './artworkService';
 
 // IndexedDB storage for offline audio files and large assets
 // Prevents localStorage 5MB quota errors and provides persistent audio playback across page reloads
@@ -202,7 +203,7 @@ export async function resolveAudioSource(
     (src.startsWith('http://') || src.startsWith('https://')) &&
     !src.startsWith('blob:')
   ) {
-    return src;
+    return normalizeMediaUrl(src);
   }
 
   // 3. Static public assets (/audio/...) or data URLs

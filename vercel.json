@@ -5,7 +5,11 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/supabase-storage/:path*",
+      "destination": "https://fcxspskofubbmqtyqlrw.supabase.co/storage/v1/object/public/:path*"
+    },
+    {
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ],

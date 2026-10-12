@@ -6,6 +6,14 @@ import { useUIStore } from '@/store/uiStore';
 import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 import { tracks } from '@/data/demo';
+import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { useImageWithRetry } from '@/hooks/useImageWithRetry';
+
+function QueueCoverImage({ src, alt, className }: { src?: string; alt?: string; className?: string }) {
+  const effective = getEffectiveCoverUrl(src);
+  const { src: imgUrl, onError } = useImageWithRetry({ src: effective, fallbackSrc: DEFAULT_MR_MUSIC_COVER });
+  return <img src={imgUrl} alt={alt || ''} onError={onError} className={className} />;
+}
 
 export function QueueDrawer() {
   const { isQueueOpen, setQueueOpen, addToast } = useUIStore();
@@ -113,7 +121,7 @@ export function QueueDrawer() {
               {currentTrack ? (
                 <div className="relative group flex items-center gap-3.5 p-3 rounded-2xl bg-gradient-to-r from-violet-900/30 to-purple-900/20 border border-violet-500/20">
                   <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 shadow-md ring-2 ring-violet-500/30">
-                    <img src={currentTrack.coverUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
+                    <QueueCoverImage src={currentTrack.coverUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
                     {isPlaying && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         <div className="flex items-end gap-[3px] h-4">
@@ -173,7 +181,7 @@ export function QueueDrawer() {
                         className="w-10 h-10 rounded-lg overflow-hidden relative flex-shrink-0 group/img"
                         title="Play immediately"
                       >
-                        <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                        <QueueCoverImage src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
                           <Play size={14} fill="white" className="text-white ml-0.5" />
                         </div>

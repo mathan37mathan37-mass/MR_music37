@@ -15,6 +15,7 @@ import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 import { useAdminStore } from '@/store/adminStore';
 import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { useImageWithRetry } from '@/hooks/useImageWithRetry';
 
 function EQBars() {
   return (
@@ -68,6 +69,11 @@ export function MusicPlayer() {
   const effectiveCover = currentTrack
     ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
     : DEFAULT_MR_MUSIC_COVER;
+  const fallbackCover = getEffectiveCoverUrl(undefined, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+  const { src: playerCoverSrc, onError: handleCoverError } = useImageWithRetry({
+    src: effectiveCover,
+    fallbackSrc: fallbackCover,
+  });
 
   if (!currentTrack) return null;
 
@@ -112,12 +118,9 @@ export function MusicPlayer() {
             className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-violet-500/30 shadow-md"
           >
             <img
-              src={effectiveCover}
+              src={playerCoverSrc}
               alt={currentTrack.album}
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
-              }}
+              onError={handleCoverError}
               className="w-full h-full object-cover"
             />
           </motion.div>

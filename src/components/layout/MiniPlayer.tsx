@@ -5,6 +5,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
 import { useAdminStore } from '@/store/adminStore';
 import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { useImageWithRetry } from '@/hooks/useImageWithRetry';
 import { cn } from '@/utils/cn';
 
 export function MiniPlayer() {
@@ -32,6 +33,12 @@ export function MiniPlayer() {
     ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
     : DEFAULT_MR_MUSIC_COVER;
 
+  const fallbackCover = getEffectiveCoverUrl(undefined, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+  const { src: coverSrc, onError: handleImageError } = useImageWithRetry({
+    src: effectiveCover,
+    fallbackSrc: fallbackCover,
+  });
+
   if (!currentTrack) return null;
 
   const progressPercent = Math.min(100, Math.max(0, progress * 100));
@@ -57,12 +64,9 @@ export function MiniPlayer() {
           onClick={toggleFullscreen}
         >
           <img
-            src={effectiveCover}
+            src={coverSrc}
             alt={currentTrack.album}
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
-            }}
+            onError={handleImageError}
             className="w-full h-full object-cover"
           />
         </div>

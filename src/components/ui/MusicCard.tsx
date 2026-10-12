@@ -12,7 +12,8 @@ import { useUIStore } from '@/store/uiStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useOfflineSongs } from '@/hooks/useOfflineSongs';
 import { useAdminStore } from '@/store/adminStore';
-import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { getEffectiveCoverUrl } from '@/services/artworkService';
+import { useImageWithRetry } from '@/hooks/useImageWithRetry';
 import type { Track } from '@/types';
 
 interface MusicCardProps {
@@ -128,18 +129,12 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
   );
 
   const effectiveCover = getEffectiveCoverUrl(track.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+  const fallbackCover = getEffectiveCoverUrl(undefined, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
 
-  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = event.currentTarget;
-    target.onerror = null;
-    if (matchedAlbum?.coverUrl && !matchedAlbum.coverUrl.startsWith('blob:') && target.src !== matchedAlbum.coverUrl) {
-      target.src = matchedAlbum.coverUrl;
-    } else if (matchedArtist?.imageUrl && !matchedArtist.imageUrl.startsWith('blob:') && target.src !== matchedArtist.imageUrl) {
-      target.src = matchedArtist.imageUrl;
-    } else {
-      target.src = DEFAULT_MR_MUSIC_COVER;
-    }
-  };
+  const { src: coverSrc, onError: handleImageError } = useImageWithRetry({
+    src: effectiveCover,
+    fallbackSrc: fallbackCover,
+  });
 
   return (
     <motion.div
@@ -182,11 +177,10 @@ export function MusicCard({ track, index, showIndex, className, onRemove, remove
       {/* Cover Art */}
       <div className="relative w-11 h-11 flex-shrink-0 rounded-lg overflow-hidden shadow music-card-cover">
         <img
-          src={effectiveCover}
+          src={coverSrc}
           alt={track.album}
           loading="lazy"
           decoding="async"
-          referrerPolicy="no-referrer"
           onError={handleImageError}
           className="w-full h-full object-cover"
         />

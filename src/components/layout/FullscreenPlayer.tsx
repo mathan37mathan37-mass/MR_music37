@@ -16,6 +16,7 @@ import { formatDuration } from '@/utils/cn';
 import { cn } from '@/utils/cn';
 import { useAdminStore } from '@/store/adminStore';
 import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
+import { useImageWithRetry } from '@/hooks/useImageWithRetry';
 
 export function FullscreenPlayer() {
   const { isFullscreen, setFullscreen, toggleQueue, addToast } = useUIStore();
@@ -47,6 +48,13 @@ export function FullscreenPlayer() {
   const effectiveCover = currentTrack
     ? getEffectiveCoverUrl(currentTrack.coverUrl, matchedAlbum?.coverUrl, matchedArtist?.imageUrl)
     : DEFAULT_MR_MUSIC_COVER;
+
+  const fallbackCover = getEffectiveCoverUrl(undefined, matchedAlbum?.coverUrl, matchedArtist?.imageUrl);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { src: coverSrc, onError: handleCoverError } = useImageWithRetry({
+    src: effectiveCover,
+    fallbackSrc: fallbackCover,
+  });
 
   const [activeTab, setActiveTab] = useState<'artwork' | 'lyrics'>('artwork');
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode | 'off'>('bars');
@@ -294,12 +302,9 @@ export function FullscreenPlayer() {
                     }}
                   >
                     <img
-                      src={effectiveCover}
+                      src={coverSrc}
                       alt={currentTrack.title}
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = DEFAULT_MR_MUSIC_COVER;
-                      }}
+                      onError={handleCoverError}
                       className={cn(
                         'w-full h-full object-cover spin-continuous transition-opacity',
                         isPlaying ? 'spin-running' : 'spin-paused'
@@ -354,8 +359,9 @@ export function FullscreenPlayer() {
                 <div className="flex items-center justify-between pb-3 border-b border-white/10 text-xs text-white/50 px-2">
                   <div className="flex items-center gap-2">
                     <img
-                      src={currentTrack.coverUrl}
+                      src={coverSrc}
                       alt=""
+                      onError={handleCoverError}
                       className="w-7 h-7 rounded-lg object-cover"
                     />
                     <div className="text-left">

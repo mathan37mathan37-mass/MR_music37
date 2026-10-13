@@ -31,7 +31,10 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     const buffer = await upstreamRes.arrayBuffer();
-    return res.send(Buffer.from(buffer));
+    const payload = typeof (globalThis as any).Buffer !== 'undefined'
+      ? (globalThis as any).Buffer.from(buffer)
+      : new Uint8Array(buffer);
+    return res.send(payload);
   } catch (err: any) {
     return res.status(502).send(err?.message || 'Proxy fetch failed');
   }

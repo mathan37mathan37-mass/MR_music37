@@ -399,18 +399,47 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     removeFromQueue: (trackId) => {
-      set((s) => {
-        const nextQueue = s.queue.filter((t) => t.id !== trackId);
-        const nextOriginalQueue = s.originalQueue.filter((t) => t.id !== trackId);
-        const currentIndex = s.currentTrack ? nextQueue.findIndex((t) => t.id === s.currentTrack?.id) : -1;
+      const state = get();
+      const nextQueue = state.queue.filter((t) => t.id !== trackId);
+      const nextOriginalQueue = state.originalQueue.filter((t) => t.id !== trackId);
 
-        return {
-          queue: nextQueue,
-          originalQueue: nextOriginalQueue,
-          currentTrackIndex: currentIndex,
-        };
+      // If the deleted track is the current track, advance or stop
+      if (state.currentTrack?.id === trackId) {
+        if (nextQueue.length === 0) {
+          // Nothing left — stop cleanly
+          audioEngine.pause();
+          set({
+            queue: [],
+            originalQueue: [],
+            currentTrack: null,
+            currentTrackIndex: -1,
+            isPlaying: false,
+            progress: 0,
+            currentTime: 0,
+          });
+          return;
+        }
+
+        // Advance to the track that was after the deleted one (or last if at tail)
+        const deletedIdx = state.queue.findIndex((t) => t.id === trackId);
+        const nextIdx = Math.min(deletedIdx, nextQueue.length - 1);
+        const nextTrack = nextQueue[nextIdx];
+        set({ queue: nextQueue, originalQueue: nextOriginalQueue });
+        get().playTrack(nextTrack);
+        return;
+      }
+
+      const currentIndex = state.currentTrack
+        ? nextQueue.findIndex((t) => t.id === state.currentTrack?.id)
+        : -1;
+
+      set({
+        queue: nextQueue,
+        originalQueue: nextOriginalQueue,
+        currentTrackIndex: currentIndex,
       });
     },
+
 
     reorderQueue: (fromIndex, toIndex) => {
       const { queue, currentTrack } = get();

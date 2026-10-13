@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Trash2, X, Loader2 } from 'lucide-react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   isDanger?: boolean;
+  /** When true, the confirm button shows a spinner and is disabled */
+  isLoading?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -22,18 +24,19 @@ export function ConfirmDialog({
   confirmLabel = 'Delete Permanently',
   cancelLabel = 'Cancel',
   isDanger = true,
+  isLoading = false,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !isLoading) {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, isLoading, onClose]);
 
   return (
     <AnimatePresence>
@@ -44,7 +47,7 @@ export function ConfirmDialog({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={isLoading ? undefined : onClose}
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
 
@@ -61,16 +64,23 @@ export function ConfirmDialog({
             <div className="relative flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
-                  <AlertTriangle size={22} />
+                  {isLoading ? (
+                    <Loader2 size={22} className="animate-spin" />
+                  ) : (
+                    <AlertTriangle size={22} />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white tracking-tight">{title}</h3>
-                  <p className="text-xs text-white/50 mt-0.5">Destructive Administrator Action</p>
+                  <p className="text-xs text-white/50 mt-0.5">
+                    {isLoading ? 'Deleting — please wait…' : 'Destructive Administrator Action'}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={onClose}
-                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+                onClick={isLoading ? undefined : onClose}
+                disabled={isLoading}
+                className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <X size={18} />
               </button>
@@ -84,7 +94,7 @@ export function ConfirmDialog({
                 </div>
               )}
               <p className="text-xs text-white/40">
-                This operation will immediately synchronize with Firestore and local caches. This action cannot be undone.
+                This operation will immediately synchronize with Supabase and local caches. This action cannot be undone.
               </p>
             </div>
 
@@ -92,20 +102,25 @@ export function ConfirmDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-semibold border border-white/10 transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-semibold border border-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {cancelLabel}
               </button>
               <button
                 type="button"
+                disabled={isLoading}
                 onClick={() => {
-                  onConfirm();
-                  onClose();
+                  if (!isLoading) onConfirm();
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
               >
-                <Trash2 size={14} />
-                <span>{confirmLabel}</span>
+                {isLoading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                <span>{isLoading ? 'Deleting…' : confirmLabel}</span>
               </button>
             </div>
           </motion.div>

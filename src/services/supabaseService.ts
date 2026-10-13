@@ -839,12 +839,200 @@ export async function adminSyncSongToFirestore(song: Track): Promise<void> {
   }
 }
 
+// ── Shared artwork guard helpers ──────────────────────────────────────────────
+const EXTERNAL_ART_HINTS = [
+  'images.unsplash.com',
+  'apple.com',
+  'mzstatic.com',
+  'placeholder',
+  'photo-1514525253161',
+  'photo-1516280440614',
+];
+
+function isExternalArtwork(url?: string | null): boolean {
+  if (!url) return true;
+  return EXTERNAL_ART_HINTS.some((h) => url.includes(h));
+}
+
+/** Extract a storage path from a Supabase public URL, e.g. "songs/abc/track.mp3" */
+function extractStoragePath(publicUrl: string, bucket: string): string | null {
+  try {
+    const marker = `/storage/v1/object/public/${bucket}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx !== -1) return decodeURIComponent(publicUrl.slice(idx + marker.length));
+  } catch { /* ignore */ }
+  return null;
+}
+
+export interface DeleteSongResult {
+  success: boolean;
+  songTitle?: string;
+  error?: string;
+  partial?: boolean; // true if some cleanup steps failed but the DB row was removed
+}
+
+/**
+ * Complete, safe song deletion:
+ *  1. Verify admin role.
+ *  2. Fetch song metadata (audio_url, cover_url, album_id).
+ *  3. Delete audio folder from `songs` storage bucket.
+ *  4. Delete song-specific cover from `covers` bucket (skips shared/external art).
+ *  5. Clean dependent rows: playlist_songs, liked_songs, downloads, listening_history.
+ *  6. Delete the `public.songs` row.
+ */
+export async function adminDeleteSongComplete(songId: string): Promise<DeleteSongResult> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  // ── 1. Verify admin ────────────────────────────────────────────────────────
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const role = await fetchUserRole(user.id);
+    if (role !== 'admin') return { success: false, error: 'Admin permission required' };
+  } catch (err) {
+    return { success: false, error: 'Auth check failed' };
+  }
+
+  // ── 2. Fetch song metadata ─────────────────────────────────────────────────
+  let songTitle = '';
+  let audioUrl: string | null = null;
+  let coverUrl: string | null = null;
+  let albumId: string | null = null;
+
+  try {
+    const { data, error } = await supabase
+      .from('songs')
+      .select('id, title, audio_url, cover_url, album_id')
+      .eq('id', songId)
+      .maybeSingle();
+
+    if (error) return { success: false, error: `Could not fetch song: ${error.message}` };
+    if (!data) return { success: false, error: 'Song not found in database' };
+
+    songTitle = data.title ?? '';
+    audioUrl = data.audio_url ?? null;
+    coverUrl = data.cover_url ?? null;
+    albumId = data.album_id ?? null;
+  } catch (err) {
+    return { success: false, error: 'Failed to fetch song metadata' };
+  }
+
+  const partialErrors: string[] = [];
+
+  // ── 3. Delete audio from `songs` storage bucket ───────────────────────────
+  try {
+    // Try to remove the whole folder `songs/<songId>/`
+    const { data: listedFiles } = await supabase.storage
+      .from('songs')
+      .list(`songs/${songId}`);
+
+    if (listedFiles && listedFiles.length > 0) {
+      const paths = listedFiles.map((f) => `songs/${songId}/${f.name}`);
+      await supabase.storage.from('songs').remove(paths);
+    }
+
+    // Also remove by direct URL path (fallback)
+    if (audioUrl) {
+      const path = extractStoragePath(audioUrl, 'songs');
+      if (path) await supabase.storage.from('songs').remove([path]);
+    }
+  } catch (err) {
+    partialErrors.push('Audio storage cleanup failed');
+    console.warn('[deleteSong] Audio storage error:', err);
+  }
+
+  // ── 4. Shared artwork guard + cover deletion ───────────────────────────────
+  try {
+    if (coverUrl && !isExternalArtwork(coverUrl)) {
+      // Check if any OTHER song uses the same cover_url
+      const { data: sharedSongs } = await supabase
+        .from('songs')
+        .select('id')
+        .eq('cover_url', coverUrl)
+        .neq('id', songId);
+
+      const isShared = sharedSongs && sharedSongs.length > 0;
+
+      // Also skip if the album cover matches
+      let albumCoverMatches = false;
+      if (albumId) {
+        const { data: album } = await supabase
+          .from('albums')
+          .select('cover_url')
+          .eq('id', albumId)
+          .maybeSingle();
+        albumCoverMatches = !!(album?.cover_url && album.cover_url === coverUrl);
+      }
+
+      if (!isShared && !albumCoverMatches) {
+        const path = extractStoragePath(coverUrl, 'covers');
+        if (path) {
+          await supabase.storage.from('covers').remove([path]);
+        }
+      }
+    }
+  } catch (err) {
+    partialErrors.push('Cover artwork cleanup failed');
+    console.warn('[deleteSong] Cover storage error:', err);
+  }
+
+  // ── 5. Clean dependent rows ────────────────────────────────────────────────
+  const depResults = await Promise.allSettled([
+    supabase.from('playlist_songs').delete().eq('song_id', songId),
+    supabase.from('liked_songs').delete().eq('song_id', songId),
+    supabase.from('downloads').delete().eq('song_id', songId),
+    supabase.from('listening_history').delete().eq('song_id', songId),
+  ]);
+
+  depResults.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      const tables = ['playlist_songs', 'liked_songs', 'downloads', 'listening_history'];
+      partialErrors.push(`Failed to clean ${tables[i]}`);
+      console.warn(`[deleteSong] Dependent cleanup error (${tables[i]}):`, r.reason);
+    }
+  });
+
+  // ── 6. Delete the songs row ────────────────────────────────────────────────
+  try {
+    const { error } = await supabase.from('songs').delete().eq('id', songId);
+    if (error) {
+      return {
+        success: false,
+        error: `DB delete failed: ${error.message}`,
+        partial: partialErrors.length > 0,
+      };
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: 'Failed to delete song record from database',
+      partial: partialErrors.length > 0,
+    };
+  }
+
+  return {
+    success: true,
+    songTitle,
+    partial: partialErrors.length > 0,
+    error: partialErrors.length > 0 ? partialErrors.join('; ') : undefined,
+  };
+}
+
+/** Legacy thin wrapper — now delegates to adminDeleteSongComplete for storage cleanup. */
 export async function adminDeleteSongFromFirestore(songId: string): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
 
   try {
-    const { error } = await supabase.from('songs').delete().eq('id', songId);
-    if (error) console.warn('adminDeleteSong error:', error.message);
+    // Use complete delete so storage + dependents are cleaned even from legacy callers
+    const result = await adminDeleteSongComplete(songId);
+    if (!result.success && !result.partial) {
+      // Fall back to bare DB delete in case auth check fails (e.g. demo/offline mode)
+      const { error } = await supabase.from('songs').delete().eq('id', songId);
+      if (error) console.warn('adminDeleteSong error:', error.message);
+    }
   } catch (err) {
     console.warn('adminDeleteSong threw:', err);
   }

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useAdminStore } from '@/store/adminStore';
 import { usePlayerStore } from '@/store/playerStore';
+import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
 import { FileUploadZone } from './FileUploadZone';
@@ -22,6 +23,7 @@ import { formatDuration, cn } from '@/utils/cn';
 import { matchSongSearch } from '@/utils/searchUtils';
 import { deduplicateCatalog } from '@/services/musicIdentityService';
 import { normalizeMediaUrl } from '@/services/artworkService';
+import { adminDeleteSongComplete } from '@/services/supabaseService';
 
 const GENRES = [
   'Electronic', 'Synthwave', 'Indie Pop', 'Alternative',
@@ -60,7 +62,8 @@ interface SongManagerProps {
 
 export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManagerProps) {
   const { songs, artists, albums, addSong, updateSong, deleteSong, deleteMultipleSongs } = useAdminStore();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore();
+  const { playTrack, currentTrack, isPlaying, togglePlay, removeFromQueue } = usePlayerStore();
+  const { purgeSongFromLibrary } = useLibraryStore();
   const { addToast } = useUIStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +73,8 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
   const [showAddModal, setShowAddModal] = useState(isCreateOpen);
   const [showBulkFolderModal, setShowBulkFolderModal] = useState(false);
   const [deletingSong, setDeletingSong] = useState<Track | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [titleError, setTitleError] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
@@ -1127,32 +1132,84 @@ export function SongManager({ isCreateOpen = false, onCloseCreate }: SongManager
 
       <ConfirmDialog
         isOpen={Boolean(deletingSong)}
+        isLoading={isDeleting}
         title="Delete Song from Catalog"
-        description="Are you sure you want to remove this song from the platform catalog? This will delete the song record and remove it from user playlists and libraries."
+        description="Are you sure you want to remove this song from the platform catalog? Audio file, artwork (if unshared), and all playlist/liked references will be permanently erased."
         itemName={deletingSong ? `"${deletingSong.title}" by ${deletingSong.artist}` : undefined}
         confirmLabel="Yes, Delete Song"
-        onConfirm={() => {
-          if (deletingSong) {
-            deleteSong(deletingSong.id);
+        onConfirm={async () => {
+          if (!deletingSong || isDeleting) return;
+          const songId = deletingSong.id;
+          const songTitle = deletingSong.title;
+          setIsDeleting(true);
+          try {
+            const result = await adminDeleteSongComplete(songId);
+            if (result.success) {
+              // 1. Remove from local admin store + albums
+              deleteSong(songId);
+              // 2. Purge from player queue (advances or stops)
+              removeFromQueue(songId);
+              // 3. Purge from library (liked, recent, playlists, downloads)
+              purgeSongFromLibrary(songId);
+              if (result.partial) {
+                addToast(`"${songTitle}" deleted (some cleanup steps had warnings — check console).`, 'warning' as any);
+              } else {
+                addToast(`"${songTitle}" permanently deleted from catalog & storage.`, 'success');
+              }
+            } else {
+              addToast(`Delete failed: ${result.error || 'Unknown error'}`, 'error');
+            }
+          } catch (err) {
+            addToast(`Unexpected error deleting "${songTitle}": ${err instanceof Error ? err.message : String(err)}`, 'error');
+          } finally {
+            setIsDeleting(false);
             setDeletingSong(null);
           }
         }}
-        onClose={() => setDeletingSong(null)}
+        onClose={() => { if (!isDeleting) setDeletingSong(null); }}
       />
 
       <ConfirmDialog
         isOpen={bulkDeleteOpen}
+        isLoading={isBulkDeleting}
         title={`Delete ${selectedSongIds.size} Song${selectedSongIds.size !== 1 ? 's' : ''}`}
-        description={`This will permanently remove ${selectedSongIds.size} song${selectedSongIds.size !== 1 ? 's' : ''} from the catalog. This action cannot be undone.`}
+        description={`This will permanently remove ${selectedSongIds.size} song${selectedSongIds.size !== 1 ? 's' : ''} from the catalog, erase audio files, and clean all user library references. This action cannot be undone.`}
         confirmLabel={`Delete ${selectedSongIds.size} Song${selectedSongIds.size !== 1 ? 's' : ''}`}
-        onConfirm={() => {
+        onConfirm={async () => {
+          if (isBulkDeleting) return;
           const ids = Array.from(selectedSongIds);
-          deleteMultipleSongs(ids);
-          addToast(`Deleted ${ids.length} song${ids.length !== 1 ? 's' : ''} from catalog.`, 'success');
-          setSelectedSongIds(new Set());
-          setBulkDeleteOpen(false);
+          setIsBulkDeleting(true);
+          let successCount = 0;
+          let failCount = 0;
+          try {
+            await Promise.allSettled(
+              ids.map(async (id) => {
+                const result = await adminDeleteSongComplete(id);
+                if (result.success) {
+                  deleteSong(id);
+                  removeFromQueue(id);
+                  purgeSongFromLibrary(id);
+                  successCount++;
+                } else {
+                  failCount++;
+                  console.warn(`[BulkDelete] Failed to delete song ${id}:`, result.error);
+                }
+              })
+            );
+            if (failCount === 0) {
+              addToast(`Successfully deleted ${successCount} song${successCount !== 1 ? 's' : ''} from catalog.`, 'success');
+            } else {
+              addToast(`Deleted ${successCount} song${successCount !== 1 ? 's' : ''}, ${failCount} failed — check console for details.`, 'error');
+            }
+          } catch (err) {
+            addToast(`Bulk delete encountered an error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+          } finally {
+            setIsBulkDeleting(false);
+            setSelectedSongIds(new Set());
+            setBulkDeleteOpen(false);
+          }
         }}
-        onClose={() => setBulkDeleteOpen(false)}
+        onClose={() => { if (!isBulkDeleting) setBulkDeleteOpen(false); }}
       />
 
       {/* ── Smart Bulk Music Folder Import Modal ────────────────────────────── */}

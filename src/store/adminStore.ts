@@ -15,6 +15,7 @@ import { tracks as initialTracks, artists as initialArtists, albums as initialAl
 import {
   adminSyncSongToFirestore,
   adminDeleteSongFromFirestore,
+  adminDeleteSongComplete,
   adminSyncArtistToFirestore,
   adminDeleteArtistFromFirestore,
   adminSyncAlbumToFirestore,
@@ -384,11 +385,18 @@ export const useAdminStore = create<AdminState>()(
       },
 
       deleteSong: (id) => {
-        const { songs, logActivity } = get();
+        const { songs, albums, logActivity } = get();
         const target = songs.find((s) => s.id === id);
         if (!target) return;
 
-        set({ songs: songs.filter((s) => s.id !== id) });
+        // Remove song from catalog
+        const updatedAlbums = albums.map((al) => ({
+          ...al,
+          tracks: al.tracks.filter((t) => t.id !== id),
+          trackCount: Math.max(0, al.tracks.filter((t) => t.id !== id).length),
+        }));
+
+        set({ songs: songs.filter((s) => s.id !== id), albums: updatedAlbums });
         adminDeleteSongFromFirestore(id);
 
         logActivity({
@@ -579,11 +587,18 @@ export const useAdminStore = create<AdminState>()(
       },
 
       deleteMultipleSongs: (ids) => {
-        const { songs, logActivity } = get();
+        const { songs, albums, logActivity } = get();
         const targets = songs.filter((s) => ids.includes(s.id));
         if (!targets.length) return;
 
-        set({ songs: songs.filter((s) => !ids.includes(s.id)) });
+        const idSet = new Set(ids);
+        const updatedAlbums = albums.map((al) => ({
+          ...al,
+          tracks: al.tracks.filter((t) => !idSet.has(t.id)),
+          trackCount: Math.max(0, al.tracks.filter((t) => !idSet.has(t.id)).length),
+        }));
+
+        set({ songs: songs.filter((s) => !idSet.has(s.id)), albums: updatedAlbums });
         targets.forEach((s) => adminDeleteSongFromFirestore(s.id));
 
         logActivity({

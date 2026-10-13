@@ -82,6 +82,12 @@ interface LibraryState {
   // Remove song from library
   removeSongFromLibrary: (trackId: string) => void;
 
+  /**
+   * Fully purge a deleted song from all local library collections:
+   * likedSongIds, downloadedTrackIds, recentlyPlayed, and every userPlaylist.tracks.
+   */
+  purgeSongFromLibrary: (trackId: string) => void;
+
   // Cloud Firestore Sync
   loadUserFirestoreData: (uid: string) => Promise<void>;
   resetUserData: (uid?: string) => void;
@@ -456,6 +462,18 @@ export const useLibraryStore = create<LibraryState>()(
           downloadedTrackIds: downloadedTrackIds.filter((id) => id !== trackId),
           recentlyPlayed: recentlyPlayed.filter((item) => item.track.id !== trackId),
         });
+      },
+
+      purgeSongFromLibrary: (trackId) => {
+        set((s) => ({
+          likedSongIds: s.likedSongIds.filter((id) => id !== trackId),
+          downloadedTrackIds: s.downloadedTrackIds.filter((id) => id !== trackId),
+          recentlyPlayed: s.recentlyPlayed.filter((item) => item.track.id !== trackId),
+          userPlaylists: s.userPlaylists.map((p) => ({
+            ...p,
+            tracks: p.tracks.filter((t) => t.id !== trackId),
+          })),
+        }));
       },
     }),
     {

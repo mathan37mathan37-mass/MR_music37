@@ -1,15 +1,4 @@
 import { create } from 'zustand';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-  deleteUser,
-  sendPasswordResetEmail,
-  onAuthStateChanged,
-  type User as FirebaseUser
-} from 'firebase/auth';
-import { auth, googleProvider, isFirebaseConfigured } from '@/services/firebase';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   syncUserProfile,
@@ -23,7 +12,6 @@ import type { UserProfile, UserPreferences, AuthModalTab } from '@/types/auth';
 
 interface AuthState {
   user: UserProfile | null;
-  firebaseUser: FirebaseUser | null;
   isLoading: boolean;
   isAuthModalOpen: boolean;
   authModalTab: AuthModalTab;
@@ -96,12 +84,14 @@ async function buildProfileFromSupabaseUser(
   const existing = await fetchUserProfile(sbUser.id);
 
   if (existing) {
-    // Merge email back from session (not stored in profiles table)
     return { ...existing, email: sbUser.email ?? existing.email };
   }
 
   const name = displayName || meta.full_name || meta.name || 'Music Lover';
-  const uname = username || meta.user_name || meta.preferred_username ||
+  const uname =
+    username ||
+    meta.user_name ||
+    meta.preferred_username ||
     name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
   const newProfile: UserProfile = {
@@ -135,11 +125,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
   if (isSupabaseConfigured() && supabase) {
     const handleSessionUser = (sbUser: any, event?: string) => {
       const meta = sbUser.user_metadata ?? {};
-      const fallbackName = meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Music Lover';
+      const fallbackName =
+        meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Music Lover';
       const fallbackUsername = meta.user_name || sbUser.email?.split('@')[0] || 'user';
       const fallbackPhoto = meta.avatar_url ?? meta.picture ?? null;
 
-      // 1. Immediately mark user as logged in with their Google/session data
+      // 1. Immediately mark user as logged in with session metadata
       const immediateProfile: UserProfile = {
         uid: sbUser.id,
         email: sbUser.email ?? null,
@@ -156,7 +147,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
       set({ user: immediateProfile, isLoading: false, isAuthModalOpen: false });
 
-      // 2. Defer async database lookups to next tick to avoid Supabase auth lock deadlocks
+      // 2. Fetch full profile and role asynchronously
       setTimeout(async () => {
         try {
           const profile = await buildProfileFromSupabaseUser(sbUser);
@@ -172,68 +163,39 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }, 0);
     };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        handleSessionUser(session.user);
-      } else {
-        set({ isLoading: false });
-      }
-    }).catch(() => set({ isLoading: false }));
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          handleSessionUser(session.user);
+        } else {
+          set({ isLoading: false });
+        }
+      })
+      .catch(() => set({ isLoading: false }));
 
     supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         handleSessionUser(session.user, event);
       } else if (event === 'SIGNED_OUT') {
-        set({ user: null, firebaseUser: null, isLoading: false });
+        set({ user: null, isLoading: false });
         useAnalyticsStore.getState().onLogout();
-      }
-    });
-
-  // ── Firebase Auth listener (fallback when Supabase not configured) ─────
-  } else if (isFirebaseConfigured() && auth) {
-    onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        set({ isLoading: true, firebaseUser: fbUser });
-        // Use firestoreService for legacy Firebase profiles
-        const { fetchUserProfile: fbFetchProfile, syncUserProfile: fbSyncProfile } =
-          await import('@/services/firestoreService');
-        let profile = await fbFetchProfile(fbUser.uid);
-
-        if (!profile) {
-          profile = {
-            uid: fbUser.uid,
-            email: fbUser.email,
-            displayName: fbUser.displayName || 'Music Lover',
-            username: (fbUser.displayName || 'user').toLowerCase().replace(/\s+/g, '_'),
-            photoURL: fbUser.photoURL || null,
-            favoriteGenres: ['Synthwave', 'Lo-Fi'],
-            favoriteArtists: [],
-            preferences: defaultPreferences,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          await fbSyncProfile(profile);
-        }
-
-        set({ user: profile, isLoading: false });
-        await applyUserSession(profile);
-      } else {
-        set({ user: null, firebaseUser: null, isLoading: false });
       }
     });
   }
 
   // ── Demo mode initial state ────────────────────────────────────────────────
   const savedDemo = localStorage.getItem('melodix_demo_auth');
-  const isLive = isSupabaseConfigured() || isFirebaseConfigured();
+  const isLive = isSupabaseConfigured();
   const initialUser: UserProfile | null = isLive
     ? null
-    : (savedDemo ? JSON.parse(savedDemo) : DEMO_USER);
+    : savedDemo
+    ? JSON.parse(savedDemo)
+    : DEMO_USER;
   const initialLoading = isLive;
 
   return {
     user: initialUser,
-    firebaseUser: null,
     isLoading: initialLoading,
     isAuthModalOpen: false,
     authModalTab: 'login',
@@ -247,11 +209,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ isAuthModalOpen: false, redirectAfterLogin: null });
     },
 
-    // ── Sign Up ────────────────────────────────────────────────────────────
+    // ── Sign Up with Email & Password ──────────────────────────────────────
     signUpWithEmail: async (name, username, email, pass, favoriteGenres = []) => {
       set({ isLoading: true });
 
-      // ── Supabase ────────────────────────────────────────────────────────
       if (isSupabaseConfigured() && supabase) {
         try {
           const { data, error } = await supabase.auth.signUp({
@@ -289,33 +250,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         return;
       }
 
-      // ── Firebase fallback ────────────────────────────────────────────────
-      if (isFirebaseConfigured() && auth) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, email, pass);
-          const { syncUserProfile: fbSync } = await import('@/services/firestoreService');
-          const newProfile: UserProfile = {
-            uid: cred.user.uid,
-            email: cred.user.email,
-            displayName: name,
-            username: username.toLowerCase().trim(),
-            photoURL: null,
-            favoriteGenres: favoriteGenres.length > 0 ? favoriteGenres : ['Synthwave', 'Electronic'],
-            favoriteArtists: [],
-            preferences: defaultPreferences,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          await fbSync(newProfile);
-          set({ user: newProfile, isLoading: false, isAuthModalOpen: false });
-        } catch (err: any) {
-          set({ isLoading: false });
-          throw new Error(err.message || 'Signup failed');
-        }
-        return;
-      }
-
-      // ── Local simulation ─────────────────────────────────────────────────
+      // Local offline/demo fallback
       const simulatedUid = `sim-${Date.now()}`;
       const newProfile: UserProfile = {
         uid: simulatedUid,
@@ -335,7 +270,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       void useAnalyticsStore.getState().loadUserData(newProfile.uid);
     },
 
-    // ── Login with Email ───────────────────────────────────────────────────
+    // ── Login with Email & Password ────────────────────────────────────────
     loginWithEmail: async (email, pass) => {
       set({ isLoading: true });
 
@@ -365,19 +300,6 @@ export const useAuthStore = create<AuthState>((set, get) => {
         return;
       }
 
-      if (isFirebaseConfigured() && auth) {
-        try {
-          const cred = await signInWithEmailAndPassword(auth, email, pass);
-          const { fetchUserProfile: fbFetch } = await import('@/services/firestoreService');
-          const profile = await fbFetch(cred.user.uid);
-          set({ user: profile, isLoading: false, isAuthModalOpen: false });
-        } catch (err: any) {
-          set({ isLoading: false });
-          throw new Error(err.message || 'Login failed');
-        }
-        return;
-      }
-
       // Demo simulation
       const simulated: UserProfile = {
         ...DEMO_USER,
@@ -391,7 +313,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       void useAnalyticsStore.getState().loadUserData(simulated.uid);
     },
 
-    // ── Google Login ───────────────────────────────────────────────────────
+    // ── Google OAuth Login ─────────────────────────────────────────────────
     loginWithGoogle: async () => {
       set({ isLoading: true });
 
@@ -411,8 +333,6 @@ export const useAuthStore = create<AuthState>((set, get) => {
             set({ isLoading: false });
             throw new Error(error.message);
           }
-          // The page will redirect — isLoading stays true until redirect completes
-          // The onAuthStateChange listener will pick up the session on return
         } catch (err: any) {
           set({ isLoading: false });
           const raw = err.message || '';
@@ -421,39 +341,6 @@ export const useAuthStore = create<AuthState>((set, get) => {
               'Cannot connect to Supabase server (Failed to fetch). If your Supabase project is paused, please resume it in your Supabase dashboard or continue using Demo Mode.'
             );
           }
-          throw new Error(err.message || 'Google sign in failed');
-        }
-        return;
-      }
-
-      if (isFirebaseConfigured() && auth) {
-        try {
-          const cred = await signInWithPopup(auth, googleProvider);
-          const { fetchUserProfile: fbFetch, syncUserProfile: fbSync } =
-            await import('@/services/firestoreService');
-          let profile = await fbFetch(cred.user.uid);
-
-          if (!profile) {
-            profile = {
-              uid: cred.user.uid,
-              email: cred.user.email,
-              displayName: cred.user.displayName || 'Google User',
-              username: (cred.user.displayName || 'user').toLowerCase().replace(/\s+/g, '_'),
-              photoURL: cred.user.photoURL || null,
-              favoriteGenres: ['Synthwave', 'Electronic'],
-              favoriteArtists: [],
-              preferences: defaultPreferences,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            };
-            await fbSync(profile);
-          }
-
-          set({ user: profile, isLoading: false, isAuthModalOpen: false });
-          useLibraryStore.getState().resetUserData(profile.uid);
-          void useAnalyticsStore.getState().loadUserData(profile.uid);
-        } catch (err: any) {
-          set({ isLoading: false });
           throw new Error(err.message || 'Google sign in failed');
         }
         return;
@@ -495,16 +382,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         } catch (err) {
           console.warn('Supabase signOut error:', err);
         }
-      } else if (isFirebaseConfigured() && auth) {
-        try {
-          await signOut(auth);
-        } catch (err) {
-          console.warn('Firebase signOut error:', err);
-        }
       }
 
       localStorage.removeItem('melodix_demo_auth');
-      set({ user: null, firebaseUser: null, isLoading: false });
+      set({ user: null, isLoading: false });
       useLibraryStore.getState().clearRecentlyPlayed();
       useLibraryStore.getState().clearRecentSearches();
       useAnalyticsStore.getState().onLogout();
@@ -515,21 +396,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ isLoading: true });
 
       if (isSupabaseConfigured() && supabase) {
-        // Supabase account deletion requires server-side admin key.
-        // Sign out the user and instruct them to contact support or
-        // use a serverless function with the admin SDK.
-        console.warn('Supabase account deletion requires a server-side function.');
         await supabase.auth.signOut();
-      } else if (isFirebaseConfigured() && auth && auth.currentUser) {
-        try {
-          await deleteUser(auth.currentUser);
-        } catch (err) {
-          console.warn('Firebase deleteUser error:', err);
-        }
       }
 
       localStorage.removeItem('melodix_demo_auth');
-      set({ user: null, firebaseUser: null, isLoading: false });
+      set({ user: null, isLoading: false });
       useLibraryStore.getState().clearRecentlyPlayed();
       useLibraryStore.getState().clearRecentSearches();
       useAnalyticsStore.getState().onLogout();
@@ -542,8 +413,6 @@ export const useAuthStore = create<AuthState>((set, get) => {
           redirectTo: `${window.location.origin}/reset-password`,
         });
         if (error) throw new Error(error.message);
-      } else if (isFirebaseConfigured() && auth) {
-        await sendPasswordResetEmail(auth, email);
       } else {
         await new Promise((res) => setTimeout(res, 600));
       }

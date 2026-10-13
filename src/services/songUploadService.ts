@@ -127,7 +127,7 @@ export async function uploadSingleSong(
         { type: item.coverBlob.type || 'image/jpeg' }
       );
     } else if (item.coverUrl && item.coverUrl.startsWith('http') && !item.coverUrl.startsWith('blob:')) {
-      // Try fetching online artwork blob to upload into Supabase/Firebase Storage
+      // Try fetching online artwork blob to upload into Supabase Storage
       try {
         const remoteBlob = await fetchArtworkBlob(item.coverUrl);
         if (remoteBlob) {

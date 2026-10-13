@@ -9,7 +9,7 @@ import { cn } from '@/utils/cn';
 interface FileUploadZoneProps {
   type: 'audio' | 'image';
   storagePath: string;
-  storageBackend?: 'firebase' | 'supabase';
+  storageBackend?: 'supabase';
   supabaseBucket?: 'songs' | 'covers' | 'avatars';
   currentUrl?: string;
   onUploadSuccess: (url: string) => void;
@@ -23,7 +23,7 @@ interface FileUploadZoneProps {
 export function FileUploadZone({
   type,
   storagePath,
-  storageBackend = 'firebase',
+  storageBackend = 'supabase',
   supabaseBucket,
   currentUrl,
   onUploadSuccess,

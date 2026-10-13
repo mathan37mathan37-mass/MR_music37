@@ -5,10 +5,9 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
-// ── LEGACY FALLBACK PIN ───────────────────────────────────────────────────────
-// Only used when neither Supabase nor Firebase is configured (pure demo mode).
-// When Supabase IS configured, admin access requires role = 'admin' in the
-// profiles table — the PIN is never evaluated.
+// ── DEMO FALLBACK PIN ────────────────────────────────────────────────────────
+// Only used when Supabase is not configured (offline demo simulation).
+// In live Supabase mode, admin access requires profiles.role = 'admin' in PostgreSQL.
 const LEGACY_PIN = import.meta.env.VITE_ADMIN_PIN || 'melodix-admin-2024';
 const SESSION_KEY = 'melodix_admin_authed';
 
@@ -36,8 +35,8 @@ export function AdminGate({ children }: AdminGateProps) {
     setLockUntil(null);
   };
 
-  // ── Role-based auth (Supabase / Firebase) ────────────────────────────────
-  // When a live backend is configured, check the user's role from the profile.
+  // ── Role-based auth (Supabase PostgreSQL) ────────────────────────────────
+  // When Supabase is configured, check the user's role from the profile.
   useEffect(() => {
     if (isSupabaseConfigured()) {
       // Supabase path: admin role from profiles table
@@ -51,12 +50,11 @@ export function AdminGate({ children }: AdminGateProps) {
           setIsAuthed(false);
           setError('Your account does not have admin privileges.');
         }
-        // Not logged in → fall through to PIN gate below
       }
       return;
     }
 
-    // ── Legacy PIN path (demo / Firebase without role claim) ──────────────
+    // ── Demo PIN path ────────────────────────────────────────────────────────
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored === 'true') {
       setIsAuthed(true);

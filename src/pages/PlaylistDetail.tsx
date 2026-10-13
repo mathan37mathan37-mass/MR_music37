@@ -11,7 +11,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
 import { useAdminStore } from '@/store/adminStore';
 import { CreatePlaylistModal } from '@/components/ui/CreatePlaylistModal';
-import { fetchPublicPlaylistsFromFirestore } from '@/services/firestoreService';
+import { fetchPublicPlaylistsFromFirestore } from '@/services/supabaseService';
 import { getEffectiveCoverUrl, DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 import { TrackCoverImage } from '@/components/ui/TrackCoverImage';
 import { formatDuration, formatTotalDuration } from '@/utils/cn';

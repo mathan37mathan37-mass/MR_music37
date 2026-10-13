@@ -1,83 +1,55 @@
-# Melodix Music App
+# MR Music
 
-A Vite + React + TypeScript music app with Firebase-backed auth/storage support and a demo fallback for local development.
+A Vite + React 19 + TypeScript music streaming application powered entirely by **Supabase** (PostgreSQL, Supabase Auth, Supabase Storage, Row Level Security) and deployed on **Vercel**.
 
-## Firebase setup
+## Architecture & Technology Stack
 
-1. Copy `.env.example` to `.env`.
-2. Replace the values with your Firebase project credentials.
-3. Ensure the variables are prefixed with `VITE_`.
-4. Rebuild and redeploy the app after changing them.
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide icons, Framer Motion, Zustand state management
+- **Database**: Supabase PostgreSQL with relational schema and Row Level Security (RLS)
+- **Authentication**: Supabase Auth (Email/Password, Google OAuth, Session persistence)
+- **Storage**: Supabase Storage buckets (`songs`, `covers`, `avatars`)
+- **Deployment**: Vercel
 
-Example:
+## Getting Started
+
+### 1. Environment Setup
+
+Create `.env` based on `.env.example`:
 
 ```bash
 cp .env.example .env
 ```
 
-The required environment variables are:
+Set your Supabase credentials:
 
 ```env
-VITE_FIREBASE_API_KEY="..."
-VITE_FIREBASE_AUTH_DOMAIN="..."
-VITE_FIREBASE_PROJECT_ID="..."
-VITE_FIREBASE_STORAGE_BUCKET="..."
-VITE_FIREBASE_MESSAGING_SENDER_ID="..."
-VITE_FIREBASE_APP_ID="..."
+VITE_SUPABASE_URL="https://your-project.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY="your-supabase-publishable-key"
+VITE_ADMIN_PIN="your-admin-pin"
 ```
 
-## Static hosting / uploaded website
+### 2. Database Schema
 
-If you are uploading a built static site to a host that does not preserve `.env` files, either:
+Run the complete PostgreSQL migration script in your Supabase SQL Editor:
+- Execute `supabase-schema.sql` (found in project root).
+- This creates the tables (`profiles`, `songs`, `artists`, `albums`, `playlists`, `playlist_songs`, `liked_songs`, `saved_albums`, `followed_artists`, `listening_history`, `downloads`), creates indexes, configures RLS policies, auto-generates user profile triggers, and creates storage buckets.
 
-- set these values in your host's environment settings before running the production build, or
-- create a runtime config file like `public/firebase-config.js` using the example at `public/firebase-config.example.js`.
-
-The app will automatically read `window.__FIREBASE_CONFIG__` if present.
-
-## Demo mode
-
-If Firebase is not configured, the app intentionally runs in local demo mode and shows built-in sample tracks instead of live Firebase data.
-
-## Development
+### 3. Local Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Build
+### 4. Production Build & Deployment
 
 ```bash
 npm run build
 ```
 
-## Deploy to Firebase Hosting
-
-1. Install the Firebase CLI:
-
-```bash
-npm install -g firebase-tools
-```
-
-2. Log in and select your Firebase project:
-
-```bash
-firebase login
-firebase use --add
-```
-
-3. Add your real Firebase web config to `.env` or to `public/firebase-config.js` before building.
-4. Build the app:
-
-```bash
-npm run build
-```
-
-5. Deploy:
-
-```bash
-firebase deploy
-```
-
-This project includes a Firebase Hosting config that serves the production build from `dist/` and rewrites SPA routes back to `index.html`.
+Deploy to Vercel:
+1. Connect the GitHub repository to Vercel.
+2. In Vercel Project Settings → Environment Variables, add:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+3. Configure Google OAuth in Supabase Dashboard (Auth → URL Configuration → Add Vercel domain to Redirect URLs).

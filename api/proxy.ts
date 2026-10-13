@@ -5,9 +5,9 @@ export default async function handler(req: any, res: any) {
     return res.status(400).send('Missing url parameter');
   }
 
-  // Allow only Supabase storage or audio URLs
+  // Allow only Supabase storage public assets
   if (
-    !url.startsWith('https://fcxspskofubbmqtyqlrw.supabase.co/storage/v1/object/public/') &&
+    !url.includes('.supabase.co/storage/v1/object/public/') &&
     !url.includes('supabase.co/storage')
   ) {
     return res.status(403).send('Forbidden destination origin');

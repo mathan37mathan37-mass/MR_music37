@@ -1,19 +1,16 @@
 /**
  * storageService.ts
  *
- * Unified upload entry-point.
+ * Unified upload entry-point for MR Music using Supabase Storage.
  *
  * Priority:
  *   1. Supabase Storage  — when VITE_SUPABASE_URL is configured
- *   2. Firebase Storage  — when VITE_FIREBASE_* is configured
- *   3. Local IndexedDB   — offline / demo fallback
+ *   2. Local IndexedDB   — offline / demo fallback
  *
  * All validation helpers and the local IndexedDB fallback are preserved
- * so the rest of the app (admin upload forms, player, etc.) works unchanged.
+ * so the rest of the app (admin upload forms, player, etc.) works seamlessly.
  */
 
-import { ref, uploadBytesResumable, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, isFirebaseConfigured } from './firebase';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadToSupabase } from './supabaseStorageService';
 import { storeMediaBlob, compressImageToDataUrl } from './mediaStorage';
@@ -96,7 +93,7 @@ export function validateImageFile(file: File): FileValidationResult {
   return { valid: true };
 }
 
-// ── Local fallback ─────────────────────────────────────────────────────────
+// ── Local fallback (IndexedDB / Data URLs for offline/demo) ────────────────
 async function runLocalFallback(
   file: File,
   sanitizedName: string,
@@ -123,7 +120,7 @@ async function runLocalFallback(
     onProgress?.(100);
     onSuccess?.(resultUrl);
     return resultUrl;
-  } catch (err) {
+  } catch {
     clearInterval(progTimer);
     const mediaKey = `audio_${Date.now()}_${sanitizedName}`;
     const persistentUri = `idb://${mediaKey}`;
@@ -134,87 +131,11 @@ async function runLocalFallback(
   }
 }
 
-// ── Firebase resumable upload ──────────────────────────────────────────────
-async function runFirebaseUpload(
-  path: string,
-  file: File,
-  options?: UploadOptions
-): Promise<string> {
-  const { onProgress, onSuccess } = options || {};
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-
-  return new Promise((resolve, reject) => {
-    let completed = false;
-    let bytesReceived = 0;
-
-    const failUpload = (reason: string) => {
-      if (completed) return;
-      completed = true;
-      const error = new Error(`Firebase Storage upload failed: ${reason}.`);
-      options?.onError?.(error);
-      reject(error);
-    };
-
-    try {
-      const fileRef = ref(storage!, `${path}/${Date.now()}_${sanitizedName}`);
-      const uploadTask = uploadBytesResumable(fileRef, file);
-
-      const watchdog = setTimeout(() => {
-        if (!completed && bytesReceived === 0) {
-          console.warn('[Firebase Storage] Upload stalled; waiting…');
-        }
-      }, 8000);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          bytesReceived = snapshot.bytesTransferred;
-          if (snapshot.bytesTransferred > 0) {
-            clearTimeout(watchdog);
-            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            onProgress?.(progress);
-          }
-        },
-        (error) => {
-          clearTimeout(watchdog);
-          try { uploadTask.cancel(); } catch (_) {}
-          failUpload(error.message || error.code || 'storage error');
-        },
-        async () => {
-          clearTimeout(watchdog);
-          if (completed) return;
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            completed = true;
-            onProgress?.(100);
-            onSuccess?.(downloadUrl);
-            resolve(downloadUrl);
-          } catch (err) {
-            failUpload(err instanceof Error ? err.message : 'getDownloadURL error');
-          }
-        }
-      );
-    } catch (err) {
-      failUpload(err instanceof Error ? err.message : 'Task creation error');
-    }
-  });
-}
-
-// Configure fast retry timeouts on Firebase storage instance if available
-if (storage) {
-  try {
-    // @ts-ignore
-    storage.maxUploadRetryTime = 1200;
-    // @ts-ignore
-    storage.maxOperationRetryTime = 1200;
-  } catch (_) {}
-}
-
 /**
- * Uploads a media file — tries Supabase first, then Firebase, then local fallback.
+ * Uploads a media file — tries Supabase Storage first, then local demo fallback.
  *
- * @param path   Storage path prefix (e.g. "songs/t123" or "covers/t123")
- * @param file   The file to upload
+ * @param path    Storage path prefix (e.g. "songs/t123" or "covers/t123")
+ * @param file    The file to upload
  * @param options Progress / success / error callbacks
  */
 export async function uploadMediaWithProgress(
@@ -234,20 +155,11 @@ export async function uploadMediaWithProgress(
 
       return await uploadToSupabase(bucket, path, file, options);
     } catch (err) {
-      console.warn('[uploadMediaWithProgress] Supabase upload failed, trying next fallback:', err);
+      console.warn('[uploadMediaWithProgress] Supabase upload failed, falling back to local demo storage:', err);
     }
   }
 
-  // ── 2. Firebase Storage ──────────────────────────────────────────────────
-  if (isFirebaseConfigured() && storage) {
-    try {
-      return await runFirebaseUpload(path, file, options);
-    } catch (err) {
-      console.warn('[uploadMediaWithProgress] Firebase storage upload failed, falling back to local/compressed:', err);
-    }
-  }
-
-  // ── 3. Local fallback (Data URL for images, IndexedDB for audio) ─────────
+  // ── 2. Local offline/demo fallback ───────────────────────────────────────
   return runLocalFallback(file, sanitizedName, options);
 }
 

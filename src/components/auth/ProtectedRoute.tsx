@@ -81,7 +81,7 @@ export function ProtectedRoute({
 
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-white/40 mt-6 pt-5 border-t border-white/5">
           <ShieldCheck size={14} className="text-emerald-400" />
-          <span>Secured with Firebase Authentication</span>
+          <span>Secured with Supabase Authentication</span>
         </div>
       </motion.div>
     </div>

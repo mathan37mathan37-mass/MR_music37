@@ -15,18 +15,36 @@ import type { ArtworkCandidate, ArtworkSourceType } from '@/types/admin';
 export const DEFAULT_MR_MUSIC_COVER =
   'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80';
 
+const SUPABASE_BASE_URL = (
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  'https://fcxspskofubbmqtyqlrw.supabase.co'
+).replace(/\/+$/, '');
+
 /**
- * Normalizes Supabase Storage URLs to use the same-origin `/supabase-storage/` reverse proxy.
- * This completely prevents QUIC protocol errors (ERR_QUIC_PROTOCOL_ERROR.QUIC_NETWORK_IDLE_TIMEOUT)
- * on Vercel deployments and localhost.
+ * Normalizes media and artwork URLs to their canonical full Supabase Storage URLs.
+ * Keeps full HTTPS URLs intact so images load natively from Supabase Storage CDN
+ * without prepending the Vercel app domain or causing proxy failures.
  */
 export function normalizeMediaUrl(url?: string): string {
   if (!url) return '';
   const trimmed = url.trim();
-  const match = trimmed.match(/^https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/(.+)$/);
-  if (match) {
-    return `/supabase-storage/${match[1]}`;
+
+  // If saved with a legacy /supabase-storage/ relative path, restore to full Supabase URL
+  if (trimmed.startsWith('/supabase-storage/')) {
+    const subPath = trimmed.replace(/^\/supabase-storage\//, '');
+    return `${SUPABASE_BASE_URL}/storage/v1/object/public/${subPath}`;
   }
+
+  // Already a complete HTTP/HTTPS URL — return directly
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    return trimmed;
+  }
+
+  // Relative storage path (e.g. covers/...) — convert to full public Supabase URL
+  if (trimmed.startsWith('covers/') || trimmed.startsWith('songs/') || trimmed.startsWith('avatars/')) {
+    return `${SUPABASE_BASE_URL}/storage/v1/object/public/${trimmed}`;
+  }
+
   return trimmed;
 }
 

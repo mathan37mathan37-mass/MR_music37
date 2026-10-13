@@ -7,7 +7,6 @@ import { MusicCard } from '@/components/ui/MusicCard';
 import { PlaylistCard } from '@/components/ui/PlaylistCard';
 import { albums, playlists, tracks, genres } from '@/data/demo';
 import { useAdminStore } from '@/store/adminStore';
-import { isFirebaseConfigured } from '@/services/firebase';
 
 const featured = [
   { id: 'f1', title: 'Summer Hits 2024', subtitle: 'The hottest tracks of the season', gradient: ['#f59e0b', '#ef4444'], image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&q=80' },

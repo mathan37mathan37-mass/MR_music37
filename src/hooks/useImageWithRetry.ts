@@ -16,7 +16,12 @@ import { DEFAULT_MR_MUSIC_COVER } from '@/services/artworkService';
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 600;
 
-const SUPABASE_STORAGE_HOST = 'https://fcxspskofubbmqtyqlrw.supabase.co/storage/v1/object/public';
+const SUPABASE_BASE = (
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  'https://fcxspskofubbmqtyqlrw.supabase.co'
+).replace(/\/+$/, '');
+
+const SUPABASE_STORAGE_HOST = `${SUPABASE_BASE}/storage/v1/object/public`;
 
 /** Strips any existing _r= retry param from a URL */
 function stripRetryParam(url: string): string {
@@ -36,34 +41,32 @@ function stripRetryParam(url: string): string {
 function addRetryParam(url: string, attempt: number): string {
   const base = stripRetryParam(url);
   const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}_r=${attempt}`;
+  return `${base}${sep}_r=${attempt}_${Date.now()}`;
 }
 
-/** Toggles between reverse-proxied /supabase-storage/ path, /api/proxy, and direct Supabase URL */
+/** Toggles between direct Supabase URL with retry param, and serverless proxy */
 function alternateUrl(url: string, attempt: number): string {
   const clean = stripRetryParam(url);
+
+  // If URL was stored as /supabase-storage/... restore to direct Supabase URL first
   if (clean.startsWith('/supabase-storage/')) {
-    const subPath = clean.replace('/supabase-storage/', '');
+    const subPath = clean.replace(/^\/supabase-storage\//, '');
     const directUrl = `${SUPABASE_STORAGE_HOST}/${subPath}`;
-    if (attempt === 1) {
-      return `/api/proxy?url=${encodeURIComponent(directUrl)}`;
-    }
-    return addRetryParam(directUrl, attempt);
+    return attempt === 1
+      ? addRetryParam(directUrl, attempt)
+      : `/api/proxy?url=${encodeURIComponent(directUrl)}`;
   }
-  if (clean.startsWith('/api/proxy')) {
-    const directMatch = clean.match(/url=([^&]+)/);
-    const directUrl = directMatch ? decodeURIComponent(directMatch[1]) : '';
-    if (directUrl) {
-      return addRetryParam(directUrl, attempt);
-    }
-  }
-  if (clean.startsWith(SUPABASE_STORAGE_HOST)) {
-    const subPath = clean.replace(`${SUPABASE_STORAGE_HOST}/`, '');
+
+  // If it's a direct Supabase URL or absolute URL
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
     if (attempt === 1) {
-      return addRetryParam(`/supabase-storage/${subPath}`, attempt);
+      // First retry: retry direct with cache-busting timestamp
+      return addRetryParam(clean, attempt);
     }
+    // Second retry: use proxy
     return `/api/proxy?url=${encodeURIComponent(clean)}`;
   }
+
   return addRetryParam(clean, attempt);
 }
 

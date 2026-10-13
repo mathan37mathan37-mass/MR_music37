@@ -1,7 +1,7 @@
 /**
  * supabaseService.ts
  *
- * Drop-in Supabase replacement for firestoreService.ts.
+ * Supabase PostgreSQL service for MR Music.
  * All functions maintain the same signatures so callsites only need to
  * swap the import, not the call shape.
  */
@@ -603,8 +603,20 @@ function songRowToTrack(row: any): Track {
     mimeType: row.mime_type ?? undefined,
     metadataSource: row.metadata_source ?? undefined,
     artworkSource: row.artwork_source ?? undefined,
-    artists: Array.isArray(row.artists) ? row.artists : (row.artist ? [row.artist] : []),
+    artists: Array.isArray(row.artists) && row.artists.length > 0
+      ? row.artists
+      : (parseArtistNames(row.artist).length > 0 ? parseArtistNames(row.artist) : (row.artist ? [row.artist] : [])),
   };
+}
+
+const unsupportedSongColumns = new Set<string>();
+const unsupportedArtistColumns = new Set<string>();
+const unsupportedAlbumColumns = new Set<string>();
+
+function parseArtistNames(artistStr?: string): string[] {
+  if (!artistStr) return [];
+  const parts = artistStr.split(/\s*(?:;|feat\.?|ft\.?|featuring|with|&|\/|\|)\s*/i);
+  return parts.map(p => p.trim()).filter(Boolean);
 }
 
 function trackToSongRow(song: Track) {
@@ -637,6 +649,10 @@ function trackToSongRow(song: Track) {
   if (song.metadataSource) row.metadata_source = song.metadataSource;
   if (song.artworkSource) row.artwork_source = song.artworkSource;
   if (song.artists && song.artists.length > 0) row.artists = song.artists;
+
+  for (const col of unsupportedSongColumns) {
+    delete row[col];
+  }
 
   return row;
 }
@@ -795,9 +811,27 @@ export async function adminSyncSongToFirestore(song: Track): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
 
   try {
-    const { error } = await supabase
+    const row = trackToSongRow(song);
+    let { error } = await supabase
       .from('songs')
-      .upsert(trackToSongRow(song), { onConflict: 'id' });
+      .upsert(row, { onConflict: 'id' });
+
+    // Handle columns not present in remote database schema cache
+    let attempts = 0;
+    while (error && error.message && error.message.includes('schema cache') && attempts < 5) {
+      attempts++;
+      const match = error.message.match(/Could not find the '([^']+)' column/i);
+      if (match && match[1]) {
+        unsupportedSongColumns.add(match[1]);
+        delete row[match[1]];
+        const retryRes = await supabase
+          .from('songs')
+          .upsert(row, { onConflict: 'id' });
+        error = retryRes.error;
+      } else {
+        break;
+      }
+    }
 
     if (error) console.warn('adminSyncSong error:', error.message);
   } catch (err) {
@@ -820,7 +854,7 @@ export async function adminSyncArtistToFirestore(artist: any): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
 
   try {
-    const { error } = await supabase.from('artists').upsert({
+    const row: Record<string, any> = {
       id: artist.id,
       name: artist.name,
       image_url: artist.imageUrl ?? null,
@@ -830,7 +864,26 @@ export async function adminSyncArtistToFirestore(artist: any): Promise<void> {
       monthly_listeners: artist.monthlyListeners ?? 0,
       followers: artist.followers ?? 0,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    };
+    for (const col of unsupportedArtistColumns) {
+      delete row[col];
+    }
+
+    let { error } = await supabase.from('artists').upsert(row, { onConflict: 'id' });
+
+    let attempts = 0;
+    while (error && error.message && error.message.includes('schema cache') && attempts < 5) {
+      attempts++;
+      const match = error.message.match(/Could not find the '([^']+)' column/i);
+      if (match && match[1]) {
+        unsupportedArtistColumns.add(match[1]);
+        delete row[match[1]];
+        const retryRes = await supabase.from('artists').upsert(row, { onConflict: 'id' });
+        error = retryRes.error;
+      } else {
+        break;
+      }
+    }
 
     if (error) console.warn('adminSyncArtist error:', error.message);
   } catch (err) {
@@ -853,7 +906,7 @@ export async function adminSyncAlbumToFirestore(album: any): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
 
   try {
-    const { error } = await supabase.from('albums').upsert({
+    const row: Record<string, any> = {
       id: album.id,
       title: album.title,
       artist_id: album.artistId ?? null,
@@ -864,7 +917,26 @@ export async function adminSyncAlbumToFirestore(album: any): Promise<void> {
       track_count: album.trackCount ?? 0,
       description: album.description ?? null,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    };
+    for (const col of unsupportedAlbumColumns) {
+      delete row[col];
+    }
+
+    let { error } = await supabase.from('albums').upsert(row, { onConflict: 'id' });
+
+    let attempts = 0;
+    while (error && error.message && error.message.includes('schema cache') && attempts < 5) {
+      attempts++;
+      const match = error.message.match(/Could not find the '([^']+)' column/i);
+      if (match && match[1]) {
+        unsupportedAlbumColumns.add(match[1]);
+        delete row[match[1]];
+        const retryRes = await supabase.from('albums').upsert(row, { onConflict: 'id' });
+        error = retryRes.error;
+      } else {
+        break;
+      }
+    }
 
     if (error) console.warn('adminSyncAlbum error:', error.message);
   } catch (err) {

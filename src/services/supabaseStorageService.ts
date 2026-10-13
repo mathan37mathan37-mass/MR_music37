@@ -1,7 +1,7 @@
 /**
  * supabaseStorageService.ts
  *
- * Supabase Storage upload helpers — replaces the Firebase Storage portions of
+ * Supabase Storage upload helpers.
  * storageService.ts.  The existing file validation constants / helpers are
  * re-exported from storageService.ts so call-sites need no changes.
  */

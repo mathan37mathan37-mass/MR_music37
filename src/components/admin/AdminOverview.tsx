@@ -276,19 +276,19 @@ export function AdminOverview({
             <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                 <span className="text-white/70 flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-400" /> Firebase Auth
+                  <CheckCircle2 size={13} className="text-emerald-400" /> Supabase Auth
                 </span>
                 <span className="text-emerald-400 font-medium">Operational</span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                 <span className="text-white/70 flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-400" /> Cloud Firestore
+                  <CheckCircle2 size={13} className="text-emerald-400" /> Supabase PostgreSQL
                 </span>
                 <span className="text-emerald-400 font-medium">Synchronized</span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
                 <span className="text-white/70 flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-400" /> Storage Engine
+                  <CheckCircle2 size={13} className="text-emerald-400" /> Supabase Storage
                 </span>
                 <span className="text-emerald-400 font-medium">Ready</span>
               </div>

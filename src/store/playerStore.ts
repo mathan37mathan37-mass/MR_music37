@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { Track, RepeatMode } from '@/types';
-import { isFirebaseConfigured } from '@/services/firebase';
 import { audioEngine } from '@/audio/audioEngine';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useAnalyticsStore } from '@/store/analyticsStore';

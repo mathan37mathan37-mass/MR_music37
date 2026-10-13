@@ -29,8 +29,8 @@ if (isSupabaseConfigured()) {
   console.info('✅ Supabase initialized successfully');
 } else {
   console.info(
-    'ℹ️ Supabase credentials not provided. Running in demo/Firebase mode. ' +
-    'Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env to enable Supabase.'
+    'ℹ️ Supabase credentials not provided. Running in local demo mode. ' +
+    'Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env to connect live Supabase.'
   );
 }
 

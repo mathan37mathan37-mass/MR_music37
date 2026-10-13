@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 import type { Track, Playlist } from '@/types';
 import { tracks, playlists as initialPlaylists, artists } from '@/data/demo';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { isFirebaseConfigured } from '@/services/firebase';
 import {
   syncLike,
   syncPlaylist,
@@ -143,7 +142,7 @@ export const useLibraryStore = create<LibraryState>()(
             fetchUserDownloads(uid),
           ]);
 
-          const isLiveBackend = isSupabaseConfigured() || isFirebaseConfigured();
+          const isLiveBackend = isSupabaseConfigured();
           const fallbackPlaylists = isLiveBackend ? [] : initialPlaylists;
 
 
